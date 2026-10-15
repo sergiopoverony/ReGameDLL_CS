@@ -29,6 +29,7 @@ public:
 	static TYPEDESCRIPTION m_SaveData[];
 
 	void ApplySequence(const char *name);
+	void EXPORT HideIfAppearTarget();
 
 	string_t m_sequenceName;
 	int m_removeOnUse;
@@ -104,6 +105,30 @@ void CItemGeneric::Spawn()
 
 	ApplySequence(FStringNull(m_sequenceName) ? "idle" : STRING(m_sequenceName));
 	m_spawned = 1;
+
+	// display items that a map shows later with an env_render ("appear") start hidden
+	if (!FStringNull(pev->targetname))
+	{
+		SetThink(&CItemGeneric::HideIfAppearTarget);
+		pev->nextthink = gpGlobals->time + 0.3f;
+	}
+}
+
+void CItemGeneric::HideIfAppearTarget()
+{
+	CBaseEntity *pRender = nullptr;
+	while ((pRender = UTIL_FindEntityByClassname(pRender, "env_render")) != nullptr)
+	{
+		if (FStringNull(pRender->pev->target) || !FStrEq(STRING(pRender->pev->target), STRING(pev->targetname)))
+			continue;
+
+		if (pRender->pev->renderamt >= 200.0f)
+		{
+			pev->rendermode = kRenderTransTexture;
+			pev->renderamt = 0;
+			break;
+		}
+	}
 }
 
 void CItemGeneric::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
@@ -167,6 +192,7 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 };
 
 LINK_ENTITY_TO_CLASS(monster_npc, CMonsterNPC, CCSMonsterNPC)
+LINK_ENTITY_TO_CLASS(monster_generic, CMonsterNPC, CCSMonsterNPC)
 IMPLEMENT_SAVERESTORE(CMonsterNPC, CBaseAnimating)
 
 void CMonsterNPC::KeyValue(KeyValueData *pkvd)
@@ -521,6 +547,9 @@ bool CMonsterNPC::PlaySeq(const char *name)
 
 void CMonsterNPC::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
+	if (FClassnameIs(pev, "monster_generic"))
+		return; // plain decoration (models/idleanim from the map), never a helper
+
 	// an npc without a "usetarget" key is a helper: +use makes it follow the player (and again stops it)
 	if (FStringNull(m_useTarget))
 	{
