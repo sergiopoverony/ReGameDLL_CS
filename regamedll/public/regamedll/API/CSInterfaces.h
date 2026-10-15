@@ -64,6 +64,7 @@ class CCSFuncRotating: public CCSEntity {};
 class CCSPendulum: public CCSEntity {};
 class CCSPointEntity: public CCSEntity {};
 class CCSStripWeapons: public CCSPointEntity {};
+class CCSScriptedSequence: public CCSPointEntity {};
 class CCSInfoIntermission: public CCSPointEntity {};
 class CCSRevertSaved: public CCSPointEntity {};
 class CCSEnvGlobal: public CCSPointEntity {};
