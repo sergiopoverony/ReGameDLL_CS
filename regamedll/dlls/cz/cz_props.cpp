@@ -128,6 +128,7 @@ public:
 	static TYPEDESCRIPTION m_SaveData[];
 
 	void ApplyIdle(const char *name);
+	void EXPORT AnimThink();
 
 	string_t m_idleAnim;
 	string_t m_useTarget;
@@ -197,7 +198,13 @@ void CMonsterNPC::Precache()
 void CMonsterNPC::Spawn()
 {
 	if (FStringNull(pev->model))
-		pev->model = MAKE_STRING("models/scientist.mdl");
+	{
+		// CZ default civilian model; models without a "model" key are civilians
+		if (g_pFileSystem->FileExists("models/npc.mdl"))
+			pev->model = MAKE_STRING("models/npc.mdl");
+		else
+			pev->model = MAKE_STRING("models/scientist.mdl");
+	}
 
 	Precache();
 	SET_MODEL(ENT(pev), STRING(pev->model));
@@ -217,6 +224,23 @@ void CMonsterNPC::Spawn()
 
 	ApplyIdle(FStringNull(m_idleAnim) ? "idle1" : STRING(m_idleAnim));
 	m_spawned = 1;
+
+	SetThink(&CMonsterNPC::AnimThink);
+	pev->nextthink = gpGlobals->time + 0.1f;
+}
+
+void CMonsterNPC::AnimThink()
+{
+	StudioFrameAdvance();
+
+	// animations that are not flagged as looping stop at the last frame: restart them
+	if (m_fSequenceFinished && !m_fSequenceLoops)
+	{
+		pev->frame = 0;
+		ResetSequenceInfo();
+	}
+
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
 void CMonsterNPC::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
