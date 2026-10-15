@@ -253,6 +253,7 @@ set(GAMEDLL_SRCS
 	"dlls/cz/trigger_sequence.cpp"
 	"dlls/cz/cz_triggers.cpp"
 	"dlls/cz/cz_props.cpp"
+	"dlls/cz/cz_soldier.cpp"
 	"dlls/tutor.cpp"
 	"dlls/tutor_base_states.cpp"
 	"dlls/tutor_base_tutor.cpp"
