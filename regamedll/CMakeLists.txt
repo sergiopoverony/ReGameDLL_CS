@@ -249,6 +249,8 @@ set(GAMEDLL_SRCS
 	"dlls/subs.cpp"
 	"dlls/training_gamerules.cpp"
 	"dlls/triggers.cpp"
+	"dlls/cz/cz_sequence.cpp"
+	"dlls/cz/trigger_sequence.cpp"
 	"dlls/tutor.cpp"
 	"dlls/tutor_base_states.cpp"
 	"dlls/tutor_base_tutor.cpp"

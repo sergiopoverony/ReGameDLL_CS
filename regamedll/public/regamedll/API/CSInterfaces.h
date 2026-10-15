@@ -198,6 +198,7 @@ class CCSFrictionModifier: public CCSEntity {};
 class CCSAutoTrigger: public CCSDelay {};
 class CCSTriggerRelay: public CCSDelay {};
 class CCSMultiManager: public CCSToggle {};
+class CCSTriggerSequence: public CCSDelay {};
 class CCSRenderFxManager: public CCSEntity {};
 class CCSTrigger: public CCSToggle {};
 class CCSTriggerHurt: public CCSTrigger {};
