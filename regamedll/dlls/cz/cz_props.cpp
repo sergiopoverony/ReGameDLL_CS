@@ -200,7 +200,9 @@ void CMonsterNPC::Spawn()
 	if (FStringNull(pev->model))
 	{
 		// CZ default civilian model; models without a "model" key are civilians
-		if (g_pFileSystem->FileExists("models/npc.mdl"))
+		if (g_pFileSystem->FileExists("models/npc-scientist.mdl"))
+			pev->model = MAKE_STRING("models/npc-scientist.mdl");
+		else if (g_pFileSystem->FileExists("models/npc.mdl"))
 			pev->model = MAKE_STRING("models/npc.mdl");
 		else
 			pev->model = MAKE_STRING("models/scientist.mdl");

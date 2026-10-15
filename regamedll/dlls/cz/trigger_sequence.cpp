@@ -48,9 +48,89 @@ static void Seq_EnsureMapLoaded()
 	Seq_LoadFile(map);
 }
 
-// "#KEY" strings come from the localization files; not implemented yet.
+// "#KEY" strings come from resource/<game>_english.txt ("lang" { "Tokens" { "KEY" "text" } })
+static std::map<std::string, std::string> g_locTable;
+static bool g_locLoaded = false;
+
+static void Loc_Load()
+{
+	g_locLoaded = true;
+
+	const char *files[] = { "resource/czeror_english.txt", "resource/cstrike_english.txt" };
+	for (const char *path : files)
+	{
+		int length = 0;
+		byte *data = LOAD_FILE_FOR_ME((char *)path, &length);
+		if (!data)
+			continue;
+
+		const char *p = (const char *)data;
+		const char *end = p + length;
+		std::vector<std::string> tokens;
+
+		// tokenizer: "quoted strings" (may span lines), { }, // comments
+		while (p < end)
+		{
+			if (*p == '/' && p + 1 < end && p[1] == '/')
+			{
+				while (p < end && *p != '\n') p++;
+			}
+			else if (*p == '"')
+			{
+				p++;
+				std::string t;
+				while (p < end && *p != '"')
+				{
+					if (*p != '\r') t += *p;
+					p++;
+				}
+				p++;
+				tokens.push_back(t);
+			}
+			else if (*p == '{' || *p == '}')
+			{
+				tokens.push_back(std::string(1, *p));
+				p++;
+			}
+			else
+				p++;
+		}
+		FREE_FILE(data);
+
+		bool inTokens = false;
+		for (size_t i = 0; i + 1 < tokens.size(); )
+		{
+			if (!inTokens)
+			{
+				if (czseq::ToLower(tokens[i]) == "tokens")
+					inTokens = true;
+				i++;
+				continue;
+			}
+
+			if (tokens[i] == "{") { i++; continue; }
+			if (tokens[i] == "}") break;
+
+			g_locTable[czseq::ToLower(tokens[i])] = tokens[i + 1];
+			i += 2;
+		}
+	}
+
+	ALERT(at_aiconsole, "trigger_sequence: %d localized strings\n", (int)g_locTable.size());
+}
+
 static const char *Seq_Localize(const char *text)
 {
+	if (!text || text[0] != '#')
+		return text;
+
+	if (!g_locLoaded)
+		Loc_Load();
+
+	auto it = g_locTable.find(czseq::ToLower(text + 1));
+	if (it != g_locTable.end())
+		return it->second.c_str();
+
 	return text;
 }
 
