@@ -312,6 +312,8 @@ public:
 	float m_flMoveYaw;
 	float m_flLastMove;
 	float m_flStuckSince;
+	float m_flProgDist = 0, m_flProgTime = 0;
+	bool m_bReplanned = false;
 	Vector m_path[16]; // waypoints (info_node path); the last one is the goal
 	int m_nPath;
 	int m_iPath;
@@ -517,6 +519,8 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 	m_bArrived = false;
 	m_flLastMove = gpGlobals->time;
 	m_flStuckSince = 0.0f;
+	m_flProgTime = 0.0f;
+	m_bReplanned = false;
 
 	if (!PlaySeq(run ? "run" : "walk"))
 		PlaySeq("idle1");
@@ -571,6 +575,34 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 			StopMove();
 		}
 		return true;
+	}
+
+	// progress watchdog: no real approach to the current goal for 1.2 s -> replan, then skip ahead
+	if (m_flProgTime == 0.0f || d < m_flProgDist - 30.0f)
+	{
+		m_flProgTime = gpGlobals->time;
+		m_flProgDist = d;
+	}
+	else if (gpGlobals->time - m_flProgTime > 1.2f)
+	{
+		m_flProgTime = gpGlobals->time;
+		m_flProgDist = d;
+		if (!finalLeg)
+			m_iPath++;               // give up this waypoint
+		else if (stopDist <= 0 && !m_bReplanned)
+		{
+			m_bReplanned = true; // replan once from here; next stall teleports
+			BuildPath(m_vMoveTarget);
+		}
+		else if (stopDist <= 0)
+		{
+			UTIL_SetOrigin(pev, m_vMoveTarget);
+			pev->angles.y = m_flMoveYaw;
+			m_bArrived = true;
+			StopMove();
+			return true;
+		}
+		return false;
 	}
 
 	// no navigation nodes here: walk straight to the target, steer around solid things
