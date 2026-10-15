@@ -20,6 +20,10 @@ static void Seq_LoadFile(const char *name)
 	if (g_seqLib.IsFileLoaded(base))
 		return;
 
+	// shared styles (TitleStyle, RadioStyle, ...) live in sequences/global.seq
+	if (czseq::ToLower(base) != "global")
+		Seq_LoadFile("global");
+
 	char path[260];
 	Q_snprintf(path, sizeof(path), "sequences/%s.seq", base.c_str());
 

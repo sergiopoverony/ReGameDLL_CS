@@ -157,6 +157,9 @@ void CTriggerHud::TriggerHudUse(CBaseEntity *pActivator, CBaseEntity *pCaller, U
 			pPlayer->m_iHideHUD &= ~hideBits;
 		else
 			pPlayer->m_iHideHUD |= hideBits;
+
+		pPlayer->m_iClientHideHUD = -1; // force the HideWeapon message to be resent
+		ALERT(at_console, "trigger_hud '%s': display %d -> hide bits %d\n", STRING(pev->targetname), m_display, pPlayer->m_iHideHUD);
 	}
 }
 

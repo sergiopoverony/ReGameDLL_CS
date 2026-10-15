@@ -155,7 +155,7 @@ public:
 	EHANDLE m_hLeader;
 };
 
-static cvar_t cz_npc_sit_offset = { "cz_npc_sit_offset", "8", 0, 8.0f, nullptr };
+static cvar_t cz_npc_sit_offset = { "cz_npc_sit_offset", "3", 0, 3.0f, nullptr };
 static bool g_czNpcCvars = false;
 
 TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
@@ -230,10 +230,39 @@ void CMonsterNPC::ApplySitOffset()
 	}
 }
 
+// CZ:DS voice lines (names from the .seq sentence groups: NPC_OK_AM, NPC_WAIT_AM, H_THANK_AM)
+struct czVoice_t { const char *kind; const char *file; };
+static const czVoice_t g_czVoices[] =
+{
+	{ "ok", "npc/npc_m_yesdo_am.wav" }, { "ok", "npc/npc_m_right_am.wav" }, { "ok", "npc/npc_m_ok_am.wav" },
+	{ "wait", "npc/npc_m_waithere_am.wav" }, { "wait", "npc/npc_m_stayhere_am.wav" },
+	{ "thank", "h/h_m_thanksave_am.wav" }, { "thank", "h/h_m_owelife_am.wav" },
+	{ "thank", "h/h_m_gladover_am.wav" }, { "thank", "h/h_m_thanks_am.wav" },
+};
+
+void Cz_PrecacheVoices()
+{
+	for (size_t i = 0; i < ARRAYSIZE(g_czVoices); i++)
+		PRECACHE_SOUND((char *)g_czVoices[i].file);
+}
+
+void Cz_Say(edict_t *pEdict, const char *kind)
+{
+	const czVoice_t *pick[8];
+	int n = 0;
+	for (size_t i = 0; i < ARRAYSIZE(g_czVoices) && n < 8; i++)
+		if (FStrEq(g_czVoices[i].kind, kind))
+			pick[n++] = &g_czVoices[i];
+	if (!n)
+		return;
+	EMIT_SOUND_DYN2(pEdict, CHAN_VOICE, pick[RANDOM_LONG(0, n - 1)]->file, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+}
+
 void CMonsterNPC::Precache()
 {
 	if (!FStringNull(pev->model))
 		PRECACHE_MODEL((char *)STRING(pev->model));
+	Cz_PrecacheVoices();
 }
 
 void CMonsterNPC::Spawn()
@@ -299,7 +328,9 @@ void CMonsterNPC::AnimThink()
 	if (m_bSitting && !m_bMoving)
 		ApplySitOffset();
 
-	pev->nextthink = gpGlobals->time + 0.1f;
+	// while walking think every frame and keep velocity non-zero: that switches the engine's
+	// 10 Hz studio "slerp" off and the client interpolates the origin normally
+	pev->nextthink = gpGlobals->time + ((m_bMoving || m_bFollow) ? 0.0f : 0.1f);
 }
 
 void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
@@ -320,7 +351,7 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 	if (m_flGroundSpeed < 1.0f)
 		m_flGroundSpeed = run ? 200.0f : 70.0f;
 
-	pev->movetype = MOVETYPE_STEP; // the client interpolates stepping monsters
+	pev->movetype = MOVETYPE_NONE; // we move the entity ourselves every frame
 }
 
 void CMonsterNPC::StopMove()
@@ -335,7 +366,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 {
 	float dt = gpGlobals->time - m_flLastMove;
 	m_flLastMove = gpGlobals->time;
-	if (dt < 0.02f) dt = 0.02f;
+	if (dt < 0.001f) dt = 0.001f;
 	if (dt > 0.25f) dt = 0.25f;
 
 	Vector to = m_vMoveTarget - pev->origin;
@@ -379,6 +410,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		n.z = pev->origin.z + to.z * (step / d);
 
 	pev->flags |= FL_ONGROUND;
+	pev->velocity = Vector(flat.x / d * m_flGroundSpeed, flat.y / d * m_flGroundSpeed, 0);
 	UTIL_SetOrigin(pev, n);
 	return false;
 }
@@ -454,9 +486,15 @@ void CMonsterNPC::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 			return;
 
 		if (m_bFollow)
+		{
 			StopFollow();
+			Cz_Say(edict(), "wait");
+		}
 		else if (pActivator && pActivator->IsPlayer())
+		{
 			StartFollow(pActivator);
+			Cz_Say(edict(), "ok");
+		}
 
 		return;
 	}

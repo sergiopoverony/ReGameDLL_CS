@@ -28,6 +28,9 @@
 
 #include "precompiled.h"
 
+void Cz_Say(edict_t *pEdict, const char *kind);
+void Cz_PrecacheVoices();
+
 cvar_t cv_hostage_ai_enable = { "hostage_ai_enable", "0", 0, 0.0f, nullptr };
 cvar_t cv_hostage_debug = { "hostage_debug", "0", FCVAR_SERVER, 0.0f, nullptr };
 cvar_t cv_hostage_stop  = { "hostage_stop", "0", FCVAR_SERVER, 0.0f, nullptr };
@@ -358,6 +361,7 @@ void CHostage::Precache()
 	}
 
 	PRECACHE_MODEL(pev->model);
+	Cz_PrecacheVoices();
 	PRECACHE_SOUND("hostage/hos1.wav");
 	PRECACHE_SOUND("hostage/hos2.wav");
 	PRECACHE_SOUND("hostage/hos3.wav");
@@ -523,6 +527,9 @@ void CHostage::IdleThink()
 					WRITE_LONG(15);
 				MESSAGE_END();
 
+				if (m_bCZ)
+					Cz_Say(edict(), "thank");
+
 				if (!(m_bCZ && m_bNoAutoRemove))
 					pev->effects |= EF_NODRAW;
 				Remove();
@@ -534,6 +541,19 @@ void CHostage::IdleThink()
 					UTIL_SetSize(pev, VEC_HOSTAGE_HULL_MIN, VEC_HOSTAGE_HULL_MAX);
 					pev->velocity = g_vecZero;
 					SetActivity(ACT_IDLE);
+
+					int idleSeq = LookupActivity(ACT_IDLE);
+					if (idleSeq < 0)
+						idleSeq = LookupSequence("idle1");
+					if (idleSeq >= 0)
+					{
+						pev->sequence = idleSeq;
+						pev->frame = 0;
+						ResetSequenceInfo();
+					}
+
+					SetThink(&CHostage::CZRescuedThink);
+					pev->nextthink = gpGlobals->time + 0.1f;
 				}
 
 				if (m_bCZ && !FStringNull(m_iszRescueTarget))
@@ -613,6 +633,21 @@ void CHostage::Remove()
 	UTIL_SetSize(pev, Vector(0, 0, 0), Vector(0, 0, 0));
 	pev->nextthink = -1;
 	m_flNextFullThink = -1;
+}
+
+// rescued CZ hostages stay on the map and just idle (loop the animation)
+void CHostage::CZRescuedThink()
+{
+	StudioFrameAdvance();
+
+	if (m_fSequenceFinished && !m_fSequenceLoops)
+	{
+		pev->frame = 0;
+		ResetSequenceInfo();
+	}
+
+	pev->velocity = g_vecZero;
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
 void CHostage::RePosition()
@@ -1004,9 +1039,13 @@ void CHostage::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useTy
 			else
 				m_State = FOLLOW;
 
+			if (m_bCZ)
+				Cz_Say(edict(), m_State == FOLLOW ? "ok" : "wait");
+
 			if (m_State == FOLLOW)
 			{
-				PlayFollowRescueSound();
+				if (!m_bCZ)
+					PlayFollowRescueSound();
 				if (TheBots)
 				{
 					TheBots->OnEvent(EVENT_HOSTAGE_USED, pActivator);

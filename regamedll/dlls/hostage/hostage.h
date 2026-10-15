@@ -104,6 +104,7 @@ public:
 public:
 	void EXPORT IdleThink();
 	void EXPORT Remove();
+	void EXPORT CZRescuedThink();
 	void RePosition();
 	void SetActivity(Activity act);
 	Activity GetActivity() { return m_Activity; }
