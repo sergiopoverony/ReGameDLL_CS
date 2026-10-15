@@ -409,6 +409,7 @@ BOOL CItemKevlar::MyTouch(CBasePlayer *pPlayer)
 }
 
 LINK_ENTITY_TO_CLASS(item_kevlar, CItemKevlar, CCSItemKevlar)
+LINK_ENTITY_TO_CLASS(item_armor, CItemKevlar, CCSItemKevlar) // CZ:DS
 
 void CItemAssaultSuit::Spawn()
 {

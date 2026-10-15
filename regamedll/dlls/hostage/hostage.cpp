@@ -545,12 +545,17 @@ void CHostage::IdleThink()
 					int idleSeq = LookupActivity(ACT_IDLE);
 					if (idleSeq < 0)
 						idleSeq = LookupSequence("idle1");
+					m_iCZIdleSeq = idleSeq;
 					if (idleSeq >= 0)
 					{
 						pev->sequence = idleSeq;
 						pev->frame = 0;
 						ResetSequenceInfo();
 					}
+
+					SetUse(nullptr); // a rescued hostage no longer follows
+					m_State = STAND;
+					m_hTargetEnt = nullptr;
 
 					SetThink(&CHostage::CZRescuedThink);
 					pev->nextthink = gpGlobals->time + 0.1f;
@@ -638,6 +643,15 @@ void CHostage::Remove()
 // rescued CZ hostages stay on the map and just idle (loop the animation)
 void CHostage::CZRescuedThink()
 {
+	// keep the idle pose no matter what else touched the animation
+	if (m_iCZIdleSeq >= 0 && pev->sequence != m_iCZIdleSeq)
+	{
+		pev->sequence = m_iCZIdleSeq;
+		pev->frame = 0;
+		ResetSequenceInfo();
+	}
+
+	pev->framerate = 1.0f;
 	StudioFrameAdvance();
 
 	if (m_fSequenceFinished && !m_fSequenceLoops)

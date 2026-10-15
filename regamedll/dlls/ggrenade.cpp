@@ -28,6 +28,8 @@ void CGrenade::Explode(Vector vecSrc, Vector vecAim)
 	Explode(&tr, DMG_BLAST);
 }
 
+void Cz_GrenadeEvent(const Vector &origin, int type);
+
 LINK_HOOK_CLASS_VOID_CUSTOM2_CHAIN(CGrenade, ExplodeFlashbang, Explode, (TraceResult *pTrace, int bitsDamageType), pTrace, bitsDamageType)
 
 // UNDONE: temporary scorching for PreAlpha - find a less sleazy permenant solution.
@@ -61,6 +63,7 @@ void CGrenade::__API_HOOK(Explode)(TraceResult *pTrace, int bitsDamageType)
 	pev->owner = nullptr;
 
 	RadiusFlash(pev->origin, pev, pevOwner, 4, CLASS_NONE, bitsDamageType);
+	Cz_GrenadeEvent(pev->origin, 1); // CZ:DS: soldiers react to flashbangs
 
 	if (RANDOM_FLOAT(0, 1) < 0.5f)
 		UTIL_DecalTrace(pTrace, DECAL_SCORCH1);
@@ -592,6 +595,7 @@ void CGrenade::__API_HOOK(SG_Detonate)()
 	}
 
 	EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/sg_explode.wav", VOL_NORM, ATTN_NORM);
+	Cz_GrenadeEvent(pev->origin, 2); // CZ:DS: soldiers react to smoke
 
 	while ((pentFind = FIND_ENTITY_BY_CLASSNAME(pentFind, "grenade")))
 	{

@@ -155,7 +155,11 @@ void CTriggerHud::TriggerHudUse(CBaseEntity *pActivator, CBaseEntity *pCaller, U
 			continue;
 
 		if (m_display)
+		{
+			// CZ training shows only health/armor (+ammo with a weapon): money and timer stay hidden
 			pPlayer->m_iHideHUD &= ~hideBits;
+			pPlayer->m_iHideHUD |= (HIDEHUD_MONEY | HIDEHUD_TIMER);
+		}
 		else
 			pPlayer->m_iHideHUD |= hideBits;
 

@@ -137,6 +137,140 @@ void CItemGeneric::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE u
 		UTIL_Remove(this);
 }
 
+
+// ---------------------------------------------------------------------------
+// Navigation: the maps carry info_node entities (the original NPCs path-find over them).
+// Nodes are connected when a human hull can walk between them in a straight line.
+// ---------------------------------------------------------------------------
+static std::vector<Vector> g_navNodes;
+static std::vector<std::vector<int> > g_navAdj;
+static std::string g_navMap;
+
+static bool Nav_Clear(const Vector &a, const Vector &b)
+{
+	TraceResult tr;
+	UTIL_TraceHull(a + Vector(0, 0, 50), b + Vector(0, 0, 50), ignore_monsters, human_hull, nullptr, &tr);
+	return tr.flFraction >= 1.0f && !tr.fStartSolid;
+}
+
+static void Nav_Load()
+{
+	const char *map = STRING(gpGlobals->mapname);
+	if (g_navMap == map)
+		return;
+
+	g_navMap = map;
+	g_navNodes.clear();
+	g_navAdj.clear();
+
+	CBaseEntity *pNode = nullptr;
+	while ((pNode = UTIL_FindEntityByClassname(pNode, "info_node")) != nullptr)
+	{
+		// put the node on the floor
+		Vector p = pNode->pev->origin;
+		TraceResult tr;
+		UTIL_TraceLine(p + Vector(0, 0, 16), p + Vector(0, 0, -200), ignore_monsters, nullptr, &tr);
+		if (tr.flFraction < 1.0f && !tr.fStartSolid)
+			p.z = tr.vecEndPos.z;
+		g_navNodes.push_back(p);
+	}
+
+	int n = (int)g_navNodes.size();
+	g_navAdj.resize(n);
+
+	for (int i = 0; i < n && n <= 600; i++)
+	{
+		for (int j = i + 1; j < n; j++)
+		{
+			if ((g_navNodes[i] - g_navNodes[j]).Length() > 700.0f)
+				continue;
+
+			if (Nav_Clear(g_navNodes[i], g_navNodes[j]))
+			{
+				g_navAdj[i].push_back(j);
+				g_navAdj[j].push_back(i);
+			}
+		}
+	}
+
+	ALERT(at_aiconsole, "nav: %d info_node loaded\n", n);
+}
+
+// returns the number of waypoints written to out (not including 'from'; the last one is 'to'), 0 = go straight
+static int Nav_FindPath(const Vector &from, const Vector &to, Vector *out, int maxOut)
+{
+	if (Nav_Clear(from, to))
+		return 0;
+
+	Nav_Load();
+	int n = (int)g_navNodes.size();
+	if (n == 0)
+		return 0;
+
+	// Dijkstra over nodes; start/end are connected to every visible node
+	std::vector<float> dist(n, 1e9f);
+	std::vector<int> prev(n, -1);
+	std::vector<char> done(n, 0);
+
+	for (int i = 0; i < n; i++)
+	{
+		float d = (g_navNodes[i] - from).Length();
+		if (d < 900.0f && Nav_Clear(from, g_navNodes[i]))
+			dist[i] = d;
+	}
+
+	int best = -1;
+	float bestCost = 1e9f;
+
+	for (;;)
+	{
+		int u = -1;
+		for (int i = 0; i < n; i++)
+			if (!done[i] && dist[i] < 1e8f && (u < 0 || dist[i] < dist[u]))
+				u = i;
+
+		if (u < 0)
+			break;
+
+		done[u] = 1;
+
+		// can the target be reached from this node?
+		float toEnd = (g_navNodes[u] - to).Length();
+		if (dist[u] + toEnd < bestCost && Nav_Clear(g_navNodes[u], to))
+		{
+			bestCost = dist[u] + toEnd;
+			best = u;
+		}
+
+		for (size_t k = 0; k < g_navAdj[u].size(); k++)
+		{
+			int v = g_navAdj[u][k];
+			float nd = dist[u] + (g_navNodes[u] - g_navNodes[v]).Length();
+			if (nd < dist[v])
+			{
+				dist[v] = nd;
+				prev[v] = u;
+			}
+		}
+	}
+
+	if (best < 0)
+		return 0;
+
+	// rebuild: to <- best <- prev ...
+	int chain[64];
+	int len = 0;
+	for (int c = best; c >= 0 && len < 64; c = prev[c])
+		chain[len++] = c;
+
+	int count = 0;
+	for (int i = len - 1; i >= 0 && count < maxOut - 1; i--)
+		out[count++] = g_navNodes[chain[i]];
+
+	out[count++] = to;
+	return count;
+}
+
 // ---------------------------------------------------------------------------
 class CMonsterNPC: public CBaseAnimating
 {
@@ -159,6 +293,7 @@ public:
 	void StartMove(const Vector &target, float yaw, bool run);
 	void StopMove();
 	bool MoveStep(float stopDist, bool checkWalls);
+	void BuildPath(const Vector &goal);
 	void StartFollow(CBaseEntity *leader);
 	void StopFollow();
 	void FollowStep();
@@ -177,6 +312,10 @@ public:
 	float m_flMoveYaw;
 	float m_flLastMove;
 	float m_flStuckSince;
+	Vector m_path[16]; // waypoints (info_node path); the last one is the goal
+	int m_nPath;
+	int m_iPath;
+	float m_flNextPath;
 	Vector m_vMoveTarget;
 	EHANDLE m_hLeader;
 };
@@ -362,9 +501,16 @@ void CMonsterNPC::AnimThink()
 	pev->nextthink = gpGlobals->time + ((m_bMoving || m_bFollow) ? 0.0f : 0.1f);
 }
 
+void CMonsterNPC::BuildPath(const Vector &goal)
+{
+	m_iPath = 0;
+	m_nPath = Nav_FindPath(pev->origin, goal, m_path, 16);
+}
+
 void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 {
 	m_vMoveTarget = target;
+	BuildPath(target);
 	m_flMoveYaw = yaw;
 	m_bRun = run;
 	m_bMoving = true;
@@ -399,15 +545,23 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	if (dt < 0.001f) dt = 0.001f;
 	if (dt > 0.25f) dt = 0.25f;
 
-	Vector to = m_vMoveTarget - pev->origin;
+	bool finalLeg = (m_iPath >= m_nPath);
+	Vector goal = finalLeg ? m_vMoveTarget : m_path[m_iPath];
+	Vector to = goal - pev->origin;
 	Vector flat(to.x, to.y, 0);
 	float d = flat.Length();
 	float step = m_flGroundSpeed * dt;
 
+	if (!finalLeg && d < 24.0f)
+	{
+		m_iPath++; // reached a waypoint: continue with the next one
+		return false;
+	}
+
 	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) : m_flMoveYaw;
 	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, 540.0f * dt);
 
-	if (d <= stopDist || d <= step + 1.0f)
+	if (finalLeg && (d <= stopDist || d <= step + 1.0f))
 	{
 		if (stopDist <= 0)
 		{
@@ -524,6 +678,13 @@ void CMonsterNPC::FollowStep()
 		}
 
 		m_vMoveTarget = leader->pev->origin;
+
+		if (gpGlobals->time >= m_flNextPath)
+		{
+			m_flNextPath = gpGlobals->time + 1.0f;
+			BuildPath(leader->pev->origin);
+		}
+
 		MoveStep(90.0f, true);
 	}
 	else if (m_bMoving)

@@ -310,9 +310,16 @@ void CBaseToggle::KeyValue(KeyValueData *pkvd)
 		m_flWait = Q_atof(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
-	else if (FStrEq(pkvd->szKeyName, "master") || FStrEq(pkvd->szKeyName, "globalstate")) // CZ:DS: "globalstate" gates the entity like a master
+	else if (FStrEq(pkvd->szKeyName, "master"))
 	{
 		m_sMaster = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "globalstate")) // CZ:DS: the entity works only while this global state is ON
+	{
+		char tmp[128];
+		Q_snprintf(tmp, sizeof(tmp), "\x01%s", pkvd->szValue); // \x01 prefix marks a global state name
+		m_sMaster = ALLOC_STRING(tmp);
 		pkvd->fHandled = TRUE;
 	}
 	else if (FStrEq(pkvd->szKeyName, "distance"))

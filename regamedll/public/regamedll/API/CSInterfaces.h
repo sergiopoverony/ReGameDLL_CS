@@ -207,6 +207,7 @@ class CCSTriggerKillTarget: public CCSDelay {};
 class CCSTriggerObjective: public CCSDelay {};
 class CCSItemGeneric: public CCSAnimating {};
 class CCSCzSoldier: public CCSAnimating {};
+class CCSMonsterMaker: public CCSDelay {};
 class CCSMonsterNPC: public CCSAnimating {};
 class CCSRenderFxManager: public CCSEntity {};
 class CCSTrigger: public CCSToggle {};

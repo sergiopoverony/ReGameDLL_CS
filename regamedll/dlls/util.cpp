@@ -996,9 +996,13 @@ bool UTIL_IsMasterTriggered(string_t sMaster, CBaseEntity *pActivator)
 {
 	if (sMaster)
 	{
-		// CZ:DS: a name that is a global state (env_global) works as a master: active while the state is ON
-		if (gGlobalState.EntityInTable(sMaster))
-			return gGlobalState.EntityGetState(sMaster) == GLOBAL_ON;
+		// CZ:DS: "globalstate" key (\x01 prefix): active only while that global state exists and is ON
+		const char *pszMaster = STRING(sMaster);
+		if (pszMaster[0] == '\x01')
+		{
+			string_t state = MAKE_STRING(pszMaster + 1);
+			return gGlobalState.EntityInTable(state) && gGlobalState.EntityGetState(state) == GLOBAL_ON;
+		}
 
 		edict_t *pentTarget = FIND_ENTITY_BY_TARGETNAME(nullptr, STRING(sMaster));
 		if (!FNullEnt(pentTarget))
