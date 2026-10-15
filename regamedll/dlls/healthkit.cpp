@@ -137,6 +137,21 @@ void CWallHealth::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 	if (!pActivator->IsPlayer())
 		return;
 
+	// CZ: wall medkit has two single-press uses
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+	{
+		if (m_iCzUses >= 2 || !(pActivator->pev->weapons & (1 << WEAPON_SUIT)) || !pActivator->CanTakeHealth(1))
+		{
+			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/medshotno1.wav", VOL_NORM, ATTN_NORM);
+			return;
+		}
+		pActivator->TakeHealth(50, DMG_GENERIC);
+		EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/medshot4.wav", VOL_NORM, ATTN_NORM);
+		m_iCzUses++;
+		pev->frame = (float)m_iCzUses;
+		return;
+	}
+
 	// if there is no juice left, turn it off
 	if (m_iJuice <= 0
 #ifdef REGAMEDLL_FIXES

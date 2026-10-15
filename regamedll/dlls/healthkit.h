@@ -51,7 +51,7 @@ public:
 	virtual void Restart();
 #endif
 
-	virtual int ObjectCaps() { return (CBaseToggle::ObjectCaps() | FCAP_CONTINUOUS_USE) & ~FCAP_ACROSS_TRANSITION; }
+	virtual int ObjectCaps() { return (CBaseToggle::ObjectCaps() | (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) ? FCAP_CONTINUOUS_USE : 0)) & ~FCAP_ACROSS_TRANSITION; }
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
 
 public:
@@ -63,6 +63,7 @@ public:
 	float m_flNextCharge;
 	int m_iReactivate;
 	int m_iJuice;
+	int m_iCzUses = 0;
 	int m_iOn;
 	float m_flSoundTime;
 };

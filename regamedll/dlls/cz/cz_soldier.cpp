@@ -301,9 +301,9 @@ void CCZMonsterMaker::Spawn()
 	SetThink(&CCZMonsterMaker::MakerThink);
 	SetUse(&CCZMonsterMaker::Use);
 
-	// spawnflag 1: start on
-	if (pev->spawnflags & 1)
-		pev->nextthink = gpGlobals->time + 0.1f;
+	// CZ: maker with no trigger starts on its own (nobody targets spawn_CT in train02)
+	if (!FStringNull(m_iszMonsterType))
+		pev->nextthink = gpGlobals->time + 0.5f;
 }
 
 void CCZMonsterMaker::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
