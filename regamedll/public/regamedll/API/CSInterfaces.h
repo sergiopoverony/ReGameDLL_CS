@@ -204,6 +204,8 @@ class CCSTriggerHud: public CCSDelay {};
 class CCSTriggerFreezePlayer: public CCSDelay {};
 class CCSTriggerKillTarget: public CCSDelay {};
 class CCSTriggerObjective: public CCSDelay {};
+class CCSItemGeneric: public CCSAnimating {};
+class CCSMonsterNPC: public CCSAnimating {};
 class CCSRenderFxManager: public CCSEntity {};
 class CCSTrigger: public CCSToggle {};
 class CCSTriggerHurt: public CCSTrigger {};
