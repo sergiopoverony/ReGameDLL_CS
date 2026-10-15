@@ -300,7 +300,13 @@ void CHostage::Spawn()
 
 void CHostage::Precache()
 {
-	if (cv_hostage_ai_enable.value)
+	if (m_bCZ && pev->model.IsNull() && g_pFileSystem->FileExists("models/hostage.mdl"))
+	{
+		m_whichModel = REGULAR_GUY;
+		pev->model = MAKE_STRING("models/hostage.mdl");
+	}
+
+	if (cv_hostage_ai_enable.value && pev->model.IsNull())
 	{
 		string_t model = iStringNull;
 
