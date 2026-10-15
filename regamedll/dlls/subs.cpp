@@ -310,7 +310,7 @@ void CBaseToggle::KeyValue(KeyValueData *pkvd)
 		m_flWait = Q_atof(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
-	else if (FStrEq(pkvd->szKeyName, "master"))
+	else if (FStrEq(pkvd->szKeyName, "master") || FStrEq(pkvd->szKeyName, "globalstate")) // CZ:DS: "globalstate" gates the entity like a master
 	{
 		m_sMaster = ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;

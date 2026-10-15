@@ -693,7 +693,7 @@ void CTriggerCDAudio::PlayTrack(edict_t *pEdict)
 					Q_strcat(path, ".wav");
 			}
 
-			bool loop = Q_strstr(path, "intro") == nullptr;
+			bool loop = false; // CZ:DS tracks play once
 			CLIENT_COMMAND(pEdict, UTIL_VarArgs("music \"%s\" \"%s\"\n", path, loop ? path : "*"));
 		}
 	}

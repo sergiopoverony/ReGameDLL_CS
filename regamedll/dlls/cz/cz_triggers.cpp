@@ -159,8 +159,12 @@ void CTriggerHud::TriggerHudUse(CBaseEntity *pActivator, CBaseEntity *pCaller, U
 		else
 			pPlayer->m_iHideHUD |= hideBits;
 
+		// the client draws health/armor only when the suit bit is set
+		if (m_display)
+			pPlayer->pev->weapons |= (1 << WEAPON_SUIT);
+
 		pPlayer->m_iClientHideHUD = -1; // force the HideWeapon message to be resent
-		ALERT(at_console, "trigger_hud '%s': display %d -> hide bits %d\n", STRING(pev->targetname), m_display, pPlayer->m_iHideHUD);
+		ALERT(at_console, "trigger_hud '%s': display %d -> hide bits %d, weapons 0x%x, health %d\n", STRING(pev->targetname), m_display, pPlayer->m_iHideHUD, pPlayer->pev->weapons, (int)pPlayer->pev->health);
 	}
 }
 

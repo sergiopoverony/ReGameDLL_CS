@@ -996,6 +996,10 @@ bool UTIL_IsMasterTriggered(string_t sMaster, CBaseEntity *pActivator)
 {
 	if (sMaster)
 	{
+		// CZ:DS: a name that is a global state (env_global) works as a master: active while the state is ON
+		if (gGlobalState.EntityInTable(sMaster))
+			return gGlobalState.EntityGetState(sMaster) == GLOBAL_ON;
+
 		edict_t *pentTarget = FIND_ENTITY_BY_TARGETNAME(nullptr, STRING(sMaster));
 		if (!FNullEnt(pentTarget))
 		{

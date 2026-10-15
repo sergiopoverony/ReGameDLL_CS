@@ -440,7 +440,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 
 			Vector cand = pev->origin + tdir * (step + 4.0f);
 			TraceResult wall;
-			UTIL_TraceHull(pev->origin + Vector(0, 0, 20), cand + Vector(0, 0, 20), ignore_monsters, human_hull, ENT(pev), &wall);
+			UTIL_TraceHull(pev->origin + Vector(0, 0, 50), cand + Vector(0, 0, 50), ignore_monsters, human_hull, ENT(pev), &wall);
 			if (wall.flFraction >= 1.0f && !wall.fStartSolid)
 			{
 				dir = tdir;
