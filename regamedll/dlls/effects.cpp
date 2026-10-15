@@ -1083,8 +1083,21 @@ TYPEDESCRIPTION CGlow::m_SaveData[] =
 LINK_ENTITY_TO_CLASS(env_glow, CGlow, CCSGlow)
 IMPLEMENT_SAVERESTORE(CGlow, CPointEntity)
 
+// CZ:DS maps use big env_glow scales (5..7); the Xash glow renderer makes them far too bright/large
+static cvar_t cz_glow_scale = { "cz_glow_scale", "0.35", 0, 0.35f, nullptr };
+static bool g_czGlowCvar = false;
+
 void CGlow::Spawn()
 {
+	if (!g_czGlowCvar)
+	{
+		CVAR_REGISTER(&cz_glow_scale);
+		g_czGlowCvar = true;
+	}
+
+	if (pev->rendermode == kRenderGlow && pev->scale > 0.0f && CVAR_GET_FLOAT("cz_glow_scale") > 0.0f)
+		pev->scale *= CVAR_GET_FLOAT("cz_glow_scale");
+
 	pev->solid = SOLID_NOT;
 	pev->movetype = MOVETYPE_NONE;
 	pev->effects = 0;

@@ -580,9 +580,33 @@ void CTriggerCDAudio::Spawn()
 	InitTrigger();
 }
 
+void CTriggerCDAudio::KeyValue(KeyValueData *pkvd)
+{
+	if (FStrEq(pkvd->szKeyName, "trackname"))
+	{
+		m_iszTrackName = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CBaseTrigger::KeyValue(pkvd);
+}
+
 void CTriggerCDAudio::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
-	PlayTrack(pCaller->edict());
+	edict_t *pEdict = nullptr;
+
+	if (pCaller && pCaller->IsPlayer())
+		pEdict = pCaller->edict();
+	else if (pActivator && pActivator->IsPlayer())
+		pEdict = pActivator->edict();
+	else
+	{
+		CBaseEntity *pPlayer = UTIL_PlayerByIndex(1); // single player
+		if (pPlayer)
+			pEdict = pPlayer->edict();
+	}
+
+	PlayTrack(pEdict);
 }
 
 const char *g_szMP3trackFileMap[] =
@@ -652,7 +676,29 @@ void PlayCDTrack(edict_t *pClient, int iTrack)
 // only plays for ONE client, so only use in single play!
 void CTriggerCDAudio::PlayTrack(edict_t *pEdict)
 {
-	PlayCDTrack(pEdict, int(pev->health));
+	if (!FStringNull(m_iszTrackName))
+	{
+		// CZ:DS: music file relative to the game directory, e.g. "sound/music/train_intro"
+		if (pEdict)
+		{
+			char path[260];
+			Q_strncpy(path, STRING(m_iszTrackName), sizeof(path) - 5);
+			path[sizeof(path) - 5] = '\0';
+
+			if (!Q_strrchr(path, '.'))
+			{
+				if (g_pFileSystem->FileExists(UTIL_VarArgs("%s.mp3", path)))
+					Q_strcat(path, ".mp3");
+				else
+					Q_strcat(path, ".wav");
+			}
+
+			bool loop = Q_strstr(path, "intro") == nullptr;
+			CLIENT_COMMAND(pEdict, UTIL_VarArgs("music \"%s\" \"%s\"\n", path, loop ? path : "*"));
+		}
+	}
+	else
+		PlayCDTrack(pEdict, int(pev->health));
 
 	SetTouch(nullptr);
 	UTIL_Remove(this);

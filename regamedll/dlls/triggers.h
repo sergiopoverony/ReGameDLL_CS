@@ -244,11 +244,14 @@ class CTriggerCDAudio: public CBaseTrigger
 {
 public:
 	virtual void Spawn();
+	virtual void KeyValue(KeyValueData *pkvd); // CZ:DS: "trackname" (music file instead of a CD track)
 	virtual void Touch(CBaseEntity *pOther);
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
 
 public:
 	void PlayTrack(edict_t *pEdict);
+
+	string_t m_iszTrackName;
 };
 
 // This plays a CD track when fired or when the player enters it's radius

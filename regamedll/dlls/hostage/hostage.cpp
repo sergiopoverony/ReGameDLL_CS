@@ -300,10 +300,17 @@ void CHostage::Spawn()
 
 void CHostage::Precache()
 {
-	if (m_bCZ && pev->model.IsNull() && g_pFileSystem->FileExists("models/hostage.mdl"))
+	if (m_bCZ && pev->model.IsNull())
 	{
-		m_whichModel = REGULAR_GUY;
-		pev->model = MAKE_STRING("models/hostage.mdl");
+		// CZ hostages are the civilian npc model (head / skin pick the person)
+		const char *czModel = g_pFileSystem->FileExists("models/npc-scientist.mdl") ? "models/npc-scientist.mdl"
+			: (g_pFileSystem->FileExists("models/hostage.mdl") ? "models/hostage.mdl" : nullptr);
+
+		if (czModel)
+		{
+			m_whichModel = REGULAR_GUY;
+			pev->model = MAKE_STRING(czModel);
+		}
 	}
 
 	if (cv_hostage_ai_enable.value && pev->model.IsNull())
@@ -519,6 +526,15 @@ void CHostage::IdleThink()
 				if (!(m_bCZ && m_bNoAutoRemove))
 					pev->effects |= EF_NODRAW;
 				Remove();
+
+				if (m_bCZ && m_bNoAutoRemove)
+				{
+					// rescued CZ hostages stay on the map: stand still instead of running in place
+					pev->solid = SOLID_SLIDEBOX;
+					UTIL_SetSize(pev, VEC_HOSTAGE_HULL_MIN, VEC_HOSTAGE_HULL_MAX);
+					pev->velocity = g_vecZero;
+					SetActivity(ACT_IDLE);
+				}
 
 				if (m_bCZ && !FStringNull(m_iszRescueTarget))
 					FireTargets(STRING(m_iszRescueTarget), pPlayer ? (CBaseEntity *)pPlayer : this, this, USE_TOGGLE, 0);

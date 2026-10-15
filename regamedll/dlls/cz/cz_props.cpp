@@ -130,13 +130,33 @@ public:
 	void ApplyIdle(const char *name);
 	void EXPORT AnimThink();
 	bool PlaySeq(const char *name);
+	void ApplySitOffset();
+	void StartMove(const Vector &target, float yaw, bool run);
+	void StopMove();
+	bool MoveStep(float stopDist, bool checkWalls);
+	void StartFollow(CBaseEntity *leader);
+	void StopFollow();
+	void FollowStep();
 
 	string_t m_idleAnim;
 	string_t m_useTarget;
 	int m_head;
 	int m_spawned;
 	bool m_bScripted; // driven by scripted_sequence
+	bool m_bMoving;   // walking to m_vMoveTarget (scripted)
+	bool m_bArrived;
+	bool m_bFollow;   // follows the player after +use
+	bool m_bRun;
+	bool m_bSitting;
+	float m_flSitApplied;
+	float m_flMoveYaw;
+	float m_flLastMove;
+	Vector m_vMoveTarget;
+	EHANDLE m_hLeader;
 };
+
+static cvar_t cz_npc_sit_offset = { "cz_npc_sit_offset", "8", 0, 8.0f, nullptr };
+static bool g_czNpcCvars = false;
 
 TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 {
@@ -189,6 +209,25 @@ void CMonsterNPC::ApplyIdle(const char *name)
 	pev->sequence = seq;
 	pev->frame = 0;
 	ResetSequenceInfo();
+	ApplySitOffset();
+}
+
+// sitting poses are authored with the model origin on the floor: lift them onto the chair
+void CMonsterNPC::ApplySitOffset()
+{
+	float mins[3], maxs[3];
+	m_bSitting = false;
+	if (ExtractBbox(pev->sequence, mins, maxs))
+		m_bSitting = (maxs[2] < 56.0f);
+
+	float want = m_bSitting ? CVAR_GET_FLOAT("cz_npc_sit_offset") : 0.0f;
+	if (want != m_flSitApplied)
+	{
+		Vector o = pev->origin;
+		o.z += want - m_flSitApplied;
+		m_flSitApplied = want;
+		UTIL_SetOrigin(pev, o);
+	}
 }
 
 void CMonsterNPC::Precache()
@@ -210,16 +249,23 @@ void CMonsterNPC::Spawn()
 			pev->model = MAKE_STRING("models/scientist.mdl");
 	}
 
+	if (!g_czNpcCvars)
+	{
+		CVAR_REGISTER(&cz_npc_sit_offset);
+		g_czNpcCvars = true;
+	}
+
 	Precache();
 	SET_MODEL(ENT(pev), STRING(pev->model));
 
-	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72)); // origin at the feet, like HL monsters
-	UTIL_SetOrigin(pev, pev->origin);
-
+	// solid must be set before the entity is linked into the world, otherwise players walk through it
 	pev->movetype = MOVETYPE_NONE;
 	pev->solid = SOLID_SLIDEBOX;
 	pev->takedamage = DAMAGE_NO;
 	pev->health = 100;
+
+	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72)); // origin at the feet, like HL monsters
+	UTIL_SetOrigin(pev, pev->origin);
 
 	InitBoneControllers();
 
@@ -237,6 +283,11 @@ void CMonsterNPC::AnimThink()
 {
 	StudioFrameAdvance();
 
+	if (m_bMoving)
+		MoveStep(0, false);
+	else if (m_bFollow && !m_bScripted)
+		FollowStep();
+
 	// animations that are not flagged as looping stop at the last frame: restart them
 	if (m_fSequenceFinished && !m_fSequenceLoops && !m_bScripted)
 	{
@@ -244,7 +295,142 @@ void CMonsterNPC::AnimThink()
 		ResetSequenceInfo();
 	}
 
+	// the cvar can be changed live to tune the chair offset
+	if (m_bSitting && !m_bMoving)
+		ApplySitOffset();
+
 	pev->nextthink = gpGlobals->time + 0.1f;
+}
+
+void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
+{
+	m_vMoveTarget = target;
+	m_flMoveYaw = yaw;
+	m_bRun = run;
+	m_bMoving = true;
+	m_bArrived = false;
+	m_flLastMove = gpGlobals->time;
+
+	if (!PlaySeq(run ? "run" : "walk"))
+		PlaySeq("idle1");
+
+	m_bSitting = false;
+	ApplySitOffset();
+
+	if (m_flGroundSpeed < 1.0f)
+		m_flGroundSpeed = run ? 200.0f : 70.0f;
+
+	pev->movetype = MOVETYPE_STEP; // the client interpolates stepping monsters
+}
+
+void CMonsterNPC::StopMove()
+{
+	m_bMoving = false;
+	pev->movetype = MOVETYPE_NONE;
+	pev->velocity = g_vecZero;
+}
+
+// moves towards m_vMoveTarget; returns true when the target is reached
+bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
+{
+	float dt = gpGlobals->time - m_flLastMove;
+	m_flLastMove = gpGlobals->time;
+	if (dt < 0.02f) dt = 0.02f;
+	if (dt > 0.25f) dt = 0.25f;
+
+	Vector to = m_vMoveTarget - pev->origin;
+	Vector flat(to.x, to.y, 0);
+	float d = flat.Length();
+	float step = m_flGroundSpeed * dt;
+
+	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) : m_flMoveYaw;
+	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, 540.0f * dt);
+
+	if (d <= stopDist || d <= step + 1.0f)
+	{
+		if (stopDist <= 0)
+		{
+			UTIL_SetOrigin(pev, m_vMoveTarget);
+			pev->angles.y = m_flMoveYaw;
+			m_bArrived = true;
+			StopMove();
+		}
+		return true;
+	}
+
+	Vector n = pev->origin + Vector(flat.x / d * step, flat.y / d * step, 0);
+
+	if (checkWalls)
+	{
+		TraceResult wall;
+		Vector a = pev->origin + Vector(0, 0, 20);
+		Vector b = n + Vector(0, 0, 20);
+		UTIL_TraceHull(a, b, ignore_monsters, human_hull, ENT(pev), &wall);
+		if (wall.flFraction < 1.0f)
+			return false;
+	}
+
+	// stay on the floor (stairs, ramps): the marks only give the final height
+	TraceResult tr;
+	UTIL_TraceLine(n + Vector(0, 0, 40), n + Vector(0, 0, -60), ignore_monsters, ENT(pev), &tr);
+	if (tr.flFraction < 1.0f && !tr.fStartSolid)
+		n.z = tr.vecEndPos.z + m_flSitApplied;
+	else
+		n.z = pev->origin.z + to.z * (step / d);
+
+	pev->flags |= FL_ONGROUND;
+	UTIL_SetOrigin(pev, n);
+	return false;
+}
+
+void CMonsterNPC::StartFollow(CBaseEntity *leader)
+{
+	m_hLeader = leader;
+	m_bFollow = true;
+	m_flLastMove = gpGlobals->time;
+}
+
+void CMonsterNPC::StopFollow()
+{
+	if (!m_bFollow)
+		return;
+
+	m_bFollow = false;
+	StopMove();
+	ApplyIdle(FStringNull(m_idleAnim) ? "idle1" : STRING(m_idleAnim));
+}
+
+void CMonsterNPC::FollowStep()
+{
+	CBaseEntity *leader = m_hLeader;
+	if (!leader || !leader->IsAlive())
+	{
+		StopFollow();
+		return;
+	}
+
+	Vector flat = leader->pev->origin - pev->origin;
+	flat.z = 0;
+	float d = flat.Length();
+
+	if (d > 110.0f)
+	{
+		bool run = d > 320.0f;
+		int curWalk = LookupSequence(run ? "run" : "walk");
+		if (!m_bMoving || m_bRun != run || pev->sequence != curWalk)
+		{
+			StartMove(leader->pev->origin, pev->angles.y, run);
+			m_bArrived = false;
+		}
+
+		m_vMoveTarget = leader->pev->origin;
+		MoveStep(90.0f, true);
+	}
+	else if (m_bMoving)
+	{
+		StopMove();
+		ApplyIdle("idle1");
+	}
 }
 
 bool CMonsterNPC::PlaySeq(const char *name)
@@ -261,7 +447,21 @@ bool CMonsterNPC::PlaySeq(const char *name)
 
 void CMonsterNPC::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
-	if (FStringNull(m_useTarget) || Cz_IsNullName(STRING(m_useTarget)))
+	// an npc without a "usetarget" key is a helper: +use makes it follow the player (and again stops it)
+	if (FStringNull(m_useTarget))
+	{
+		if (m_bScripted)
+			return;
+
+		if (m_bFollow)
+			StopFollow();
+		else if (pActivator && pActivator->IsPlayer())
+			StartFollow(pActivator);
+
+		return;
+	}
+
+	if (Cz_IsNullName(STRING(m_useTarget)))
 		return;
 
 	FireTargets(STRING(m_useTarget), pActivator, this, USE_TOGGLE, 0);
@@ -342,16 +542,38 @@ void CCZScriptedSequence::Spawn()
 	pev->movetype = MOVETYPE_NONE;
 	m_state = 0;
 
-	// no targetname: starts by itself
 	if (FStringNull(pev->targetname))
 	{
-		SetThink(&CCZScriptedSequence::AutoStart);
-		pev->nextthink = gpGlobals->time + 1.0f;
+		if (m_flRadius > 0 && m_fMoveTo != 0)
+		{
+			// proximity script: runs when the helper npc that follows the player gets near
+			SetThink(&CCZScriptedSequence::AutoStart);
+			pev->nextthink = gpGlobals->time + 1.0f;
+		}
+		else
+		{
+			// no targetname: starts by itself
+			SetThink(&CCZScriptedSequence::AutoStart);
+			pev->nextthink = gpGlobals->time + 1.0f;
+		}
 	}
 }
 
 void CCZScriptedSequence::AutoStart()
 {
+	if (m_flRadius > 0 && m_fMoveTo != 0)
+	{
+		CMonsterNPC *npc = FindNPC();
+		if (npc && npc->m_bFollow && (npc->pev->origin - pev->origin).Length() <= m_flRadius)
+		{
+			Use(nullptr, nullptr, USE_TOGGLE, 0);
+			return;
+		}
+
+		pev->nextthink = gpGlobals->time + 0.2f;
+		return;
+	}
+
 	Use(nullptr, nullptr, USE_TOGGLE, 0);
 }
 
@@ -393,16 +615,13 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	}
 
 	m_hNpc = npc;
+	npc->StopFollow();
 	npc->m_bScripted = true;
 	m_flLast = gpGlobals->time;
 
 	if (m_fMoveTo == 1 || m_fMoveTo == 2)
 	{
-		if (!npc->PlaySeq(m_fMoveTo == 2 ? "run" : "walk"))
-			npc->PlaySeq("idle1");
-
-		if (npc->m_flGroundSpeed < 1.0f)
-			npc->m_flGroundSpeed = (m_fMoveTo == 2) ? 200.0f : 70.0f;
+		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
 
 		m_state = 1;
 		SetThink(&CCZScriptedSequence::ScriptThink);
@@ -459,23 +678,11 @@ void CCZScriptedSequence::ScriptThink()
 
 	if (m_state == 1)
 	{
-		Vector to = pev->origin - npc->pev->origin;
-		Vector flat = Vector(to.x, to.y, 0);
-		float dist2d = flat.Length();
-		float step = npc->m_flGroundSpeed * dt;
-
-		if (dist2d <= step + 1.0f)
+		if (npc->m_bArrived)
 		{
-			UTIL_SetOrigin(npc->pev, pev->origin);
-			npc->pev->angles.y = pev->angles.y;
 			StartPlay();
 			return;
 		}
-
-		float frac = step / dist2d;
-		Vector newOrg = npc->pev->origin + Vector(to.x * frac, to.y * frac, to.z * frac);
-		npc->pev->angles.y = UTIL_VecToYaw(flat);
-		UTIL_SetOrigin(npc->pev, newOrg);
 	}
 	else if (m_state == 2)
 	{
