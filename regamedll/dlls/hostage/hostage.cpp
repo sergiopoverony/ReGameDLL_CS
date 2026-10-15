@@ -193,6 +193,34 @@ struct
 };
 
 LINK_ENTITY_TO_CLASS(hostage_entity, CHostage, CCSHostage)
+LINK_ENTITY_TO_CLASS(monster_hostage, CHostage, CCSHostage)
+
+void CHostage::KeyValue(KeyValueData *pkvd)
+{
+	if (FStrEq(pkvd->szKeyName, "rescuetarget"))
+	{
+		m_iszRescueTarget = ALLOC_STRING(pkvd->szValue);
+		m_bCZ = true;
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "head"))
+	{
+		m_iHead = atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "noautoremove"))
+	{
+		m_bNoAutoRemove = atoi(pkvd->szValue) != 0;
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "classtype"))
+	{
+		m_bCZ = true;
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CBaseMonster::KeyValue(pkvd);
+}
 LINK_ENTITY_TO_CLASS(monster_scientist, CHostage, CCSHostage)
 
 void CHostage::Spawn()
@@ -265,6 +293,9 @@ void CHostage::Spawn()
 	m_bStuck = FALSE;
 	m_flStuckTime = 0;
 	m_improv = nullptr;
+
+	if (m_bCZ && m_iHead > 0)
+		SetBodygroup(1, m_iHead);
 }
 
 void CHostage::Precache()
@@ -479,15 +510,22 @@ void CHostage::IdleThink()
 					WRITE_LONG(15);
 				MESSAGE_END();
 
-				pev->effects |= EF_NODRAW;
+				if (!(m_bCZ && m_bNoAutoRemove))
+					pev->effects |= EF_NODRAW;
 				Remove();
+
+				if (m_bCZ && !FStringNull(m_iszRescueTarget))
+					FireTargets(STRING(m_iszRescueTarget), pPlayer ? (CBaseEntity *)pPlayer : this, this, USE_TOGGLE, 0);
 
 #ifdef REGAMEDLL_FIXES
 				SendHostageEventMsg();
 #endif
 
-				CSGameRules()->m_iHostagesRescued++;
-				CSGameRules()->CheckWinConditions();
+				if (!m_bCZ)
+				{
+					CSGameRules()->m_iHostagesRescued++;
+					CSGameRules()->CheckWinConditions();
+				}
 
 				Broadcast(pPlayer ? "rescued" : "escaped");
 			}

@@ -87,6 +87,7 @@ class CHostage: public CBaseMonster
 public:
 	virtual void Spawn();
 	virtual void Precache();
+	virtual void KeyValue(KeyValueData *pkvd);
 	virtual int ObjectCaps();		// make hostage "useable"
 	virtual int Classify() { return CLASS_HUMAN_PASSIVE; }
 	virtual void TraceAttack(entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
@@ -189,6 +190,12 @@ public:
 
 	enum ModelType { REGULAR_GUY, OLD_GUY, BLACK_GUY, GOOFY_GUY };
 	ModelType m_whichModel;
+
+	// CZ:DS monster_hostage
+	string_t m_iszRescueTarget;
+	int m_iHead;
+	bool m_bCZ;
+	bool m_bNoAutoRemove;
 };
 
 class SimpleChatter
