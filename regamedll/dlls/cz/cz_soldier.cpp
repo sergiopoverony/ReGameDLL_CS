@@ -40,17 +40,17 @@ struct SoldierWeapon
 
 static const SoldierWeapon g_soldierWeapons[] =
 {
-	{ "pistol",       5, "pistol_combatidlle" },
-	{ "smg",          7, "combatidle" },
-	{ "mp5",          0, "combatidle" },
-	{ "shotgun",      1, "combatidle" },
-	{ "assaultrifle", 4, "combatidle" },
-	{ "sniperrifle",  3, "sniper_stand" },
-	{ "machinegun",   6, "combatidle" },
-	{ "grenader",     0, "combatidle" },
-	{ "law",          2, "LAW_fire_idle" },
-	{ "melee",        8, "machete_combatidle" },
-	{ "kamakazi",     8, "machete_combatidle" },
+	{ "pistol",       5, "idle1" },
+	{ "smg",          7, "idle1" },
+	{ "mp5",          0, "idle1" },
+	{ "shotgun",      1, "idle1" },
+	{ "assaultrifle", 4, "idle1" },
+	{ "sniperrifle",  3, "idle1" },
+	{ "machinegun",   6, "idle1" },
+	{ "grenader",     0, "idle1" },
+	{ "law",          2, "idle1" },
+	{ "melee",        8, "idle1" },
+	{ "kamakazi",     8, "idle1" },
 };
 
 static const SoldierWeapon *Soldier_FindWeapon(const char *classname)

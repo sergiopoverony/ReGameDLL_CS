@@ -145,7 +145,8 @@ void CTriggerHud::Spawn()
 
 void CTriggerHud::TriggerHudUse(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
-	const int hideBits = HIDEHUD_WEAPONS | HIDEHUD_FLASHLIGHT | HIDEHUD_ALL | HIDEHUD_HEALTH | HIDEHUD_TIMER | HIDEHUD_MONEY | HIDEHUD_CROSSHAIR;
+	// HIDEHUD_ALL is not used: the client skips ALL hud drawing with it, including the text messages
+	const int hideBits = HIDEHUD_WEAPONS | HIDEHUD_FLASHLIGHT | HIDEHUD_HEALTH | HIDEHUD_TIMER | HIDEHUD_MONEY | HIDEHUD_CROSSHAIR;
 
 	for (int i = 1; i <= gpGlobals->maxClients; i++)
 	{

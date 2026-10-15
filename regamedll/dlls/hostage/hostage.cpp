@@ -1040,7 +1040,7 @@ void CHostage::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useTy
 				m_State = FOLLOW;
 
 			if (m_bCZ)
-				Cz_Say(edict(), m_State == FOLLOW ? "ok" : "wait");
+				Cz_Say(edict(), m_State == FOLLOW ? "help" : "wait");
 
 			if (m_State == FOLLOW)
 			{

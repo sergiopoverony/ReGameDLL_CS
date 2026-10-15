@@ -151,6 +151,7 @@ public:
 	float m_flSitApplied;
 	float m_flMoveYaw;
 	float m_flLastMove;
+	float m_flStuckSince;
 	Vector m_vMoveTarget;
 	EHANDLE m_hLeader;
 };
@@ -235,6 +236,8 @@ struct czVoice_t { const char *kind; const char *file; };
 static const czVoice_t g_czVoices[] =
 {
 	{ "ok", "npc/npc_m_yesdo_am.wav" }, { "ok", "npc/npc_m_right_am.wav" }, { "ok", "npc/npc_m_ok_am.wav" },
+	{ "help", "h/h_m_getmeout_am.wav" }, { "help", "h/h_m_okletsgo_am.wav" },
+	{ "help", "h/h_m_gethellout_am.wav" }, { "help", "h/h_m_ohlets_am.wav" },
 	{ "wait", "npc/npc_m_waithere_am.wav" }, { "wait", "npc/npc_m_stayhere_am.wav" },
 	{ "thank", "h/h_m_thanksave_am.wav" }, { "thank", "h/h_m_owelife_am.wav" },
 	{ "thank", "h/h_m_gladover_am.wav" }, { "thank", "h/h_m_thanks_am.wav" },
@@ -341,6 +344,7 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 	m_bMoving = true;
 	m_bArrived = false;
 	m_flLastMove = gpGlobals->time;
+	m_flStuckSince = 0.0f;
 
 	if (!PlaySeq(run ? "run" : "walk"))
 		PlaySeq("idle1");
@@ -389,16 +393,54 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		return true;
 	}
 
-	Vector n = pev->origin + Vector(flat.x / d * step, flat.y / d * step, 0);
-
-	if (checkWalls)
+	// no navigation nodes here: walk straight to the target, steer around solid things
+	Vector dir(flat.x / d, flat.y / d, 0);
+	Vector n = pev->origin + dir * step;
 	{
-		TraceResult wall;
-		Vector a = pev->origin + Vector(0, 0, 20);
-		Vector b = n + Vector(0, 0, 20);
-		UTIL_TraceHull(a, b, ignore_monsters, human_hull, ENT(pev), &wall);
-		if (wall.flFraction < 1.0f)
+		static const float angles[] = { 0, 35, -35, 70, -70, 100, -100 };
+		bool found = false;
+		float baseYaw = UTIL_VecToYaw(dir);
+
+		for (int i = 0; i < 7 && !found; i++)
+		{
+			Vector tdir;
+			if (angles[i] == 0)
+				tdir = dir;
+			else
+			{
+				float a = (baseYaw + angles[i]) * (M_PI / 180.0f);
+				tdir = Vector(cos(a), sin(a), 0);
+			}
+
+			Vector cand = pev->origin + tdir * (step + 4.0f);
+			TraceResult wall;
+			UTIL_TraceHull(pev->origin + Vector(0, 0, 20), cand + Vector(0, 0, 20), ignore_monsters, human_hull, ENT(pev), &wall);
+			if (wall.flFraction >= 1.0f && !wall.fStartSolid)
+			{
+				dir = tdir;
+				n = pev->origin + tdir * step;
+				found = true;
+			}
+		}
+
+		if (!found)
+		{
+			// boxed in: if this lasts, give up following / jump to the mark
+			if (m_flStuckSince == 0.0f)
+				m_flStuckSince = gpGlobals->time;
+			else if (gpGlobals->time - m_flStuckSince > 2.5f && stopDist <= 0)
+			{
+				UTIL_SetOrigin(pev, m_vMoveTarget);
+				pev->angles.y = m_flMoveYaw;
+				m_flStuckSince = 0;
+				m_bArrived = true;
+				StopMove();
+				return true;
+			}
 			return false;
+		}
+
+		m_flStuckSince = 0.0f;
 	}
 
 	// stay on the floor (stairs, ramps): the marks only give the final height
@@ -410,7 +452,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		n.z = pev->origin.z + to.z * (step / d);
 
 	pev->flags |= FL_ONGROUND;
-	pev->velocity = Vector(flat.x / d * m_flGroundSpeed, flat.y / d * m_flGroundSpeed, 0);
+	pev->velocity = Vector(dir.x * m_flGroundSpeed, dir.y * m_flGroundSpeed, 0);
 	UTIL_SetOrigin(pev, n);
 	return false;
 }

@@ -594,6 +594,8 @@ void CGamePlayerEquip::EquipPlayer(CBaseEntity *pEntity)
 			continue;
 #endif
 
+		ALERT(at_aiconsole, "game_player_equip '%s': give %s x%d\n", STRING(pev->targetname), STRING(m_weaponNames[i]), m_weaponCount[i]);
+
 		for (int j = 0; j < m_weaponCount[i]; j++)
 		{
 			pPlayer->GiveNamedItemEx(STRING(m_weaponNames[i]));
