@@ -89,6 +89,9 @@ public:
 	virtual void Precache();
 	virtual void KeyValue(KeyValueData *pkvd);
 	virtual int ObjectCaps();		// make hostage "useable"
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual int Classify() { return CLASS_HUMAN_PASSIVE; }
 	virtual void TraceAttack(entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType);
 	virtual BOOL TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType);
@@ -198,6 +201,7 @@ public:
 	int m_iHead;
 	bool m_bCZ;
 	bool m_bNoAutoRemove;
+	bool m_bCZRescued;
 };
 
 class SimpleChatter

@@ -417,6 +417,34 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_idleAnim, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_useTarget, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_head, FIELD_INTEGER),
+	DEFINE_FIELD(CMonsterNPC, m_spawned, FIELD_INTEGER),
+	DEFINE_FIELD(CMonsterNPC, m_bScripted, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bMoving, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bArrived, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bFollow, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bRun, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bSitting, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bGhost, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bBaseYawSet, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bReplanned, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_flSitApplied, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_flMoveYaw, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_flBiasD0, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_flBiasCur, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_flYawBias, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_nWalks, FIELD_INTEGER),
+	DEFINE_FIELD(CMonsterNPC, m_flLastMove, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flStuckSince, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flProgDist, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_flProgTime, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flFaceUntil, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flBaseYaw, FIELD_FLOAT),
+	DEFINE_ARRAY(CMonsterNPC, m_path, FIELD_VECTOR, 16),
+	DEFINE_FIELD(CMonsterNPC, m_nPath, FIELD_INTEGER),
+	DEFINE_FIELD(CMonsterNPC, m_iPath, FIELD_INTEGER),
+	DEFINE_FIELD(CMonsterNPC, m_flNextPath, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_vMoveTarget, FIELD_VECTOR),
+	DEFINE_FIELD(CMonsterNPC, m_hLeader, FIELD_EHANDLE),
 };
 
 LINK_ENTITY_TO_CLASS(monster_npc, CMonsterNPC, CCSMonsterNPC)
@@ -947,6 +975,9 @@ void CMonsterNPC::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 class CCZScriptedSequence: public CBaseEntity
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual void Spawn();
 	virtual void KeyValue(KeyValueData *pkvd);
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
@@ -967,6 +998,19 @@ public:
 	float m_flLast;
 	EHANDLE m_hNpc;
 };
+
+TYPEDESCRIPTION CCZScriptedSequence::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZScriptedSequence, m_iszEntity, FIELD_STRING),
+	DEFINE_FIELD(CCZScriptedSequence, m_iszPlay, FIELD_STRING),
+	DEFINE_FIELD(CCZScriptedSequence, m_iszIdle, FIELD_STRING),
+	DEFINE_FIELD(CCZScriptedSequence, m_fMoveTo, FIELD_INTEGER),
+	DEFINE_FIELD(CCZScriptedSequence, m_flRadius, FIELD_FLOAT),
+	DEFINE_FIELD(CCZScriptedSequence, m_state, FIELD_INTEGER),
+	DEFINE_FIELD(CCZScriptedSequence, m_flLast, FIELD_TIME),
+	DEFINE_FIELD(CCZScriptedSequence, m_hNpc, FIELD_EHANDLE),
+};
+IMPLEMENT_SAVERESTORE(CCZScriptedSequence, CBaseEntity)
 
 LINK_ENTITY_TO_CLASS(scripted_sequence, CCZScriptedSequence, CCSScriptedSequence)
 

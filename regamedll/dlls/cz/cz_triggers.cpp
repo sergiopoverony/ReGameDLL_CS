@@ -179,6 +179,9 @@ void CTriggerHud::TriggerHudUse(CBaseEntity *pActivator, CBaseEntity *pCaller, U
 class CTriggerFreezePlayer: public CBaseDelay
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual int ObjectCaps() { return 0; }
 	virtual void Spawn();
 	void EXPORT FreezeUse(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
@@ -186,6 +189,12 @@ public:
 public:
 	BOOL m_frozen;
 };
+
+TYPEDESCRIPTION CTriggerFreezePlayer::m_SaveData[] =
+{
+	DEFINE_FIELD(CTriggerFreezePlayer, m_frozen, FIELD_BOOLEAN),
+};
+IMPLEMENT_SAVERESTORE(CTriggerFreezePlayer, CBaseDelay)
 
 LINK_ENTITY_TO_CLASS(trigger_freezeplayer, CTriggerFreezePlayer, CCSTriggerFreezePlayer)
 

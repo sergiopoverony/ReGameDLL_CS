@@ -213,6 +213,7 @@ class CCSCzToolPickup: public CCSAnimating {};
 class CCSTorchFx: public CCSEntity {};
 class CCSRcPlanted: public CCSEntity {};
 class CCSRcCtl: public CCSEntity {};
+class CCSCzState: public CCSEntity {};
 class CCSCzInfoCamera: public CCSAnimating {};
 class CCSMissionFailure: public CCSDelay {};
 class CCSRenderFxManager: public CCSEntity {};

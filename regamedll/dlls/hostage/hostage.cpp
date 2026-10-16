@@ -198,6 +198,19 @@ struct
 LINK_ENTITY_TO_CLASS(hostage_entity, CHostage, CCSHostage)
 LINK_ENTITY_TO_CLASS(monster_hostage, CHostage, CCSHostage)
 
+// CZ:DS: the keyvalue-driven fields have to survive a save/load (Spawn() runs again after Restore)
+TYPEDESCRIPTION CHostage::m_SaveData[] =
+{
+	DEFINE_FIELD(CHostage, m_iszRescueTarget, FIELD_STRING),
+	DEFINE_FIELD(CHostage, m_iHead, FIELD_INTEGER),
+	DEFINE_FIELD(CHostage, m_bCZ, FIELD_CHARACTER),
+	DEFINE_FIELD(CHostage, m_bNoAutoRemove, FIELD_CHARACTER),
+	DEFINE_FIELD(CHostage, m_bCZRescued, FIELD_CHARACTER),
+	DEFINE_FIELD(CHostage, m_iCZIdleSeq, FIELD_INTEGER),
+	DEFINE_FIELD(CHostage, m_whichModel, FIELD_INTEGER),
+};
+IMPLEMENT_SAVERESTORE(CHostage, CBaseMonster)
+
 void CHostage::KeyValue(KeyValueData *pkvd)
 {
 	if (FStrEq(pkvd->szKeyName, "rescuetarget"))
@@ -299,6 +312,27 @@ void CHostage::Spawn()
 
 	if (m_bCZ && m_iHead > 0)
 		SetBodygroup(1, m_iHead);
+
+	if (m_bCZ && m_bCZRescued)
+	{
+		// loaded from a save after the rescue: stay where we were left, standing still
+		pev->solid = SOLID_SLIDEBOX;
+		pev->velocity = g_vecZero;
+		SetActivity(ACT_IDLE);
+		int idleSeq = LookupActivity(ACT_IDLE);
+		if (idleSeq < 0)
+			idleSeq = LookupSequence("idle1");
+		m_iCZIdleSeq = idleSeq;
+		if (idleSeq >= 0)
+		{
+			pev->sequence = idleSeq;
+			pev->frame = 0;
+			ResetSequenceInfo();
+		}
+		SetUse(nullptr);
+		SetThink(&CHostage::CZRescuedThink);
+		pev->nextthink = gpGlobals->time + 0.1f;
+	}
 }
 
 void CHostage::Precache()
@@ -536,6 +570,7 @@ void CHostage::IdleThink()
 
 				if (m_bCZ && m_bNoAutoRemove)
 				{
+					m_bCZRescued = true;
 					// rescued CZ hostages stay on the map: stand still instead of running in place
 					pev->solid = SOLID_SLIDEBOX;
 					UTIL_SetSize(pev, VEC_HOSTAGE_HULL_MIN, VEC_HOSTAGE_HULL_MAX);

@@ -13,6 +13,9 @@ static bool g_czCageCvar = false;
 class CCZSoldier: public CBaseAnimating
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual void Spawn();
 	virtual void Precache();
 	virtual void KeyValue(KeyValueData *pkvd);
@@ -35,6 +38,20 @@ public:
 	int m_step;
 	float m_stepTime;
 };
+
+TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZSoldier, m_bPlatMoved, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZSoldier, m_bMade, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZSoldier, m_flSettleAt, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_head, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_hPlat, FIELD_EHANDLE),
+	DEFINE_FIELD(CCZSoldier, m_platOfs, FIELD_VECTOR),
+	DEFINE_FIELD(CCZSoldier, m_react, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_step, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_stepTime, FIELD_TIME),
+};
+IMPLEMENT_SAVERESTORE(CCZSoldier, CBaseAnimating)
 
 LINK_ENTITY_TO_CLASS(monster_ct_swat_pistol, CCZSoldier, CCSCzSoldier)
 LINK_ENTITY_TO_CLASS(monster_ct_swat_smg, CCZSoldier, CCSCzSoldier)
@@ -550,6 +567,10 @@ void Cz_GrenadeEvent(const Vector &origin, int type)
 class CCZMonsterMaker: public CBaseDelay
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
+	virtual void Precache();
 	virtual void Spawn();
 	virtual void KeyValue(KeyValueData *pkvd);
 	virtual int ObjectCaps() { return (CBaseDelay::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
@@ -565,7 +586,22 @@ public:
 	float m_flSpawnDelay;
 };
 
+TYPEDESCRIPTION CCZMonsterMaker::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZMonsterMaker, m_iszMonsterType, FIELD_STRING),
+	DEFINE_FIELD(CCZMonsterMaker, m_cNumMonsters, FIELD_INTEGER),
+	DEFINE_FIELD(CCZMonsterMaker, m_cMonstersMade, FIELD_INTEGER),
+	DEFINE_FIELD(CCZMonsterMaker, m_flSpawnDelay, FIELD_FLOAT),
+};
+IMPLEMENT_SAVERESTORE(CCZMonsterMaker, CBaseDelay)
+
 LINK_ENTITY_TO_CLASS(monstermaker, CCZMonsterMaker, CCSMonsterMaker)
+
+void CCZMonsterMaker::Precache()
+{
+	if (!FStringNull(m_iszMonsterType))
+		UTIL_PrecacheOther(STRING(m_iszMonsterType));
+}
 
 void CCZMonsterMaker::KeyValue(KeyValueData *pkvd)
 {
@@ -602,7 +638,6 @@ void CCZMonsterMaker::Spawn()
 		m_cNumMonsters = 1;
 
 	SetThink(&CCZMonsterMaker::MakerThink);
-	SetUse(&CCZMonsterMaker::Use);
 
 	// models can only be precached while the map loads: do it now for the monster we will create later
 	if (!FStringNull(m_iszMonsterType))

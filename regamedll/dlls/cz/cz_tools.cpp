@@ -45,6 +45,7 @@ static CBasePlayer *Cz_Player()
 	return nullptr;
 }
 
+static void Cz_EnsureStateFwd();
 static void Cz_SendIcons(bool force = false)
 {
 	CBasePlayer *pl = Cz_Player();
@@ -62,6 +63,7 @@ static void Cz_SendIcons(bool force = false)
 
 	g_czLastA = a;
 	g_czLastC = c;
+	Cz_EnsureStateFwd();
 
 	MESSAGE_BEGIN(MSG_ONE, gmsgHudIcons, nullptr, pl->pev);
 		WRITE_SHORT(a);
@@ -152,6 +154,9 @@ static bool Cz_MapHasLocks()
 class CCZTorchFx: public CBaseEntity
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual void Spawn();
 	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 	void EXPORT FxThink();
@@ -161,6 +166,15 @@ public:
 	bool m_wasAttack;
 	EHANDLE m_hFlame;
 };
+
+TYPEDESCRIPTION CCZTorchFx::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZTorchFx, m_nextLight, FIELD_TIME),
+	DEFINE_FIELD(CCZTorchFx, m_nextSound, FIELD_TIME),
+	DEFINE_FIELD(CCZTorchFx, m_wasAttack, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZTorchFx, m_hFlame, FIELD_EHANDLE),
+};
+IMPLEMENT_SAVERESTORE(CCZTorchFx, CBaseEntity)
 
 LINK_ENTITY_TO_CLASS(cz_torch_fx, CCZTorchFx, CCSTorchFx)
 
@@ -292,9 +306,100 @@ static float g_rcStep2 = 0;
 static Vector g_rcPos, g_rcAng;
 static void Cz_RcAnim(CBasePlayer *pl, int a) { if (pl) pl->pev->weaponanim = a; }
 
+// ---------------------------------------------------------------------------
+// persistent copy of the tool state (the globals above are not part of a save game)
+// ---------------------------------------------------------------------------
+static bool g_czStatePending = false;
+
+class CCZState: public CBaseEntity
+{
+public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
+	virtual void Spawn()
+	{
+		pev->solid = SOLID_NOT;
+		pev->movetype = MOVETYPE_NONE;
+		pev->effects = EF_NODRAW;
+		SetThink(&CCZState::StateThink);
+		pev->nextthink = gpGlobals->time + 0.3f;
+	}
+	virtual void Precache()
+	{
+		// called after a save game was loaded: the globals take the saved values over
+		g_czTools = m_tools;
+		g_rcState = m_rcState;
+		g_rcDue = m_rcDue;
+		g_rcStep2 = m_rcStep2;
+		g_rcPos = m_rcPos;
+		g_rcAng = m_rcAng;
+		g_hRcPlanted = m_hPlanted;
+		g_flRcPlantTime = m_plantTime;
+		Q_strncpy(g_czLastMap, STRING(gpGlobals->mapname), sizeof(g_czLastMap) - 1);
+		g_czStatePending = true;
+		m_bLoaded = true;
+		pev->nextthink = gpGlobals->time + 0.3f;
+	}
+	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
+	void EXPORT StateThink()
+	{
+		pev->nextthink = gpGlobals->time + 0.25f;
+		CBasePlayer *pl = Cz_Player();
+		if (m_bLoaded)
+		{
+			if (!pl)
+				return;
+			m_bLoaded = false;
+			g_czStatePending = false;
+			g_czLastA = g_czLastC = -1;
+			if ((g_czTools & CZ_ICON_RCBOMB) && !UTIL_FindEntityByClassname(nullptr, "cz_rc_ctl"))
+				CBaseEntity::Create("cz_rc_ctl", pl->pev->origin, g_vecZero, nullptr);
+			Cz_SendIcons(true);
+			return;
+		}
+		m_tools = g_czTools;
+		m_rcState = g_rcState;
+		m_rcDue = g_rcDue;
+		m_rcStep2 = g_rcStep2;
+		m_rcPos = g_rcPos;
+		m_rcAng = g_rcAng;
+		m_hPlanted = g_hRcPlanted;
+		m_plantTime = g_flRcPlantTime;
+	}
+
+	int m_tools = 0;
+	int m_rcState = 0;
+	float m_rcDue = 0, m_rcStep2 = 0, m_plantTime = 0;
+	Vector m_rcPos, m_rcAng;
+	EHANDLE m_hPlanted;
+	bool m_bLoaded = false;
+};
+TYPEDESCRIPTION CCZState::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZState, m_tools, FIELD_INTEGER),
+	DEFINE_FIELD(CCZState, m_rcState, FIELD_INTEGER),
+	DEFINE_FIELD(CCZState, m_rcDue, FIELD_TIME),
+	DEFINE_FIELD(CCZState, m_rcStep2, FIELD_TIME),
+	DEFINE_FIELD(CCZState, m_plantTime, FIELD_TIME),
+	DEFINE_FIELD(CCZState, m_rcPos, FIELD_VECTOR),
+	DEFINE_FIELD(CCZState, m_rcAng, FIELD_VECTOR),
+	DEFINE_FIELD(CCZState, m_hPlanted, FIELD_EHANDLE),
+};
+IMPLEMENT_SAVERESTORE(CCZState, CBaseEntity)
+LINK_ENTITY_TO_CLASS(cz_state, CCZState, CCSCzState)
+
+static void Cz_EnsureState()
+{
+	if (!UTIL_FindEntityByClassname(nullptr, "cz_state"))
+		CBaseEntity::Create("cz_state", g_vecZero, g_vecZero, nullptr);
+}
+static void Cz_EnsureStateFwd() { Cz_EnsureState(); }
+
 class CCZRcPlanted: public CBaseAnimating
 {
 public:
+	virtual void Precache() { PRECACHE_MODEL("models/w_rcontrolbomb_bomb.mdl"); }
 	virtual void Spawn()
 	{
 		SET_MODEL(ENT(pev), "models/w_rcontrolbomb_bomb.mdl");
@@ -309,6 +414,9 @@ LINK_ENTITY_TO_CLASS(cz_rc_planted, CCZRcPlanted, CCSRcPlanted)
 class CCZRcCtl: public CBaseEntity
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual void Spawn()
 	{
 		pev->solid = SOLID_NOT;
@@ -324,12 +432,21 @@ public:
 	bool m_prev;
 	float m_tEnd;
 };
+
+TYPEDESCRIPTION CCZRcCtl::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZRcCtl, m_prev, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZRcCtl, m_tEnd, FIELD_TIME),
+};
+IMPLEMENT_SAVERESTORE(CCZRcCtl, CBaseEntity)
 LINK_ENTITY_TO_CLASS(cz_rc_ctl, CCZRcCtl, CCSRcCtl)
 
 void CCZRcCtl::CtlThink()
 {
 	pev->nextthink = gpGlobals->time + 0.02f;
 
+	if (g_czStatePending)
+		return;
 	CBasePlayer *pl = Cz_Player();
 	if (!pl || !(g_czTools & CZ_ICON_RCBOMB))
 	{
@@ -477,9 +594,12 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 class CCZToolPickup: public CBaseAnimating
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual void Spawn();
 	virtual void Precache();
-	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
+	virtual int ObjectCaps() { return ((CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION) | FCAP_MUST_SPAWN); }
 	void EXPORT PickupTouch(CBaseEntity *pOther);
 	void EXPORT PickupThink();
 	void Pickup(CBaseEntity *pOther);
@@ -488,6 +608,12 @@ public:
 	const char *m_model;
 	const char *m_vmodel;
 };
+
+TYPEDESCRIPTION CCZToolPickup::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZToolPickup, m_bit, FIELD_INTEGER),
+};
+IMPLEMENT_SAVERESTORE(CCZToolPickup, CBaseAnimating)
 
 LINK_ENTITY_TO_CLASS(weapon_camera, CCZToolPickup, CCSCzToolPickup)
 LINK_ENTITY_TO_CLASS(weapon_blowtorch, CCZToolPickup, CCSCzToolPickup)
@@ -616,6 +742,10 @@ void CCZToolPickup::Pickup(CBaseEntity *pOther)
 class CCZInfoCamera: public CBaseAnimating
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
+	virtual void Precache() { PRECACHE_MODEL("models/rpgrocket.mdl"); }
 	virtual void Spawn();
 	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
@@ -623,6 +753,12 @@ public:
 
 	EHANDLE m_hViewer;
 };
+
+TYPEDESCRIPTION CCZInfoCamera::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZInfoCamera, m_hViewer, FIELD_EHANDLE),
+};
+IMPLEMENT_SAVERESTORE(CCZInfoCamera, CBaseAnimating)
 
 LINK_ENTITY_TO_CLASS(info_camera, CCZInfoCamera, CCSCzInfoCamera)
 
@@ -687,6 +823,10 @@ void CCZInfoCamera::EndView()
 class CCZUseTool: public CBaseTrigger
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
+	virtual void Precache();
 	virtual void KeyValue(KeyValueData *pkvd);
 	virtual void Spawn();
 	void EXPORT ToolThink();
@@ -709,6 +849,27 @@ public:
 	bool m_prevAtk;
 	int m_showIcon;
 };
+
+TYPEDESCRIPTION CCZUseTool::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZUseTool, m_toolName, FIELD_STRING),
+	DEFINE_FIELD(CCZUseTool, m_toolTarget, FIELD_STRING),
+	DEFINE_FIELD(CCZUseTool, m_rcBombTarget, FIELD_STRING),
+	DEFINE_FIELD(CCZUseTool, m_toolSet, FIELD_INTEGER),
+	DEFINE_FIELD(CCZUseTool, m_defuseTime, FIELD_FLOAT),
+	DEFINE_FIELD(CCZUseTool, m_need, FIELD_INTEGER),
+	DEFINE_FIELD(CCZUseTool, m_iconBits, FIELD_INTEGER),
+	DEFINE_FIELD(CCZUseTool, m_holdTime, FIELD_FLOAT),
+	DEFINE_FIELD(CCZUseTool, m_holdStart, FIELD_TIME),
+	DEFINE_FIELD(CCZUseTool, m_nextUse, FIELD_TIME),
+	DEFINE_FIELD(CCZUseTool, m_inside, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZUseTool, m_done, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZUseTool, m_stealth, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZUseTool, m_rcMode, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZUseTool, m_prevAtk, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZUseTool, m_showIcon, FIELD_INTEGER),
+};
+IMPLEMENT_SAVERESTORE(CCZUseTool, CBaseTrigger)
 
 LINK_ENTITY_TO_CLASS(trigger_usetool, CCZUseTool, CCSTriggerUseTool)
 LINK_ENTITY_TO_CLASS(trigger_stealth, CCZUseTool, CCSTriggerStealth)
@@ -752,6 +913,17 @@ void CCZUseTool::KeyValue(KeyValueData *pkvd)
 	}
 	else
 		CBaseTrigger::KeyValue(pkvd);
+}
+
+void CCZUseTool::Precache()
+{
+	if (m_rcMode)
+	{
+		PRECACHE_MODEL("models/w_rcontrolbomb_bomb.mdl");
+		PRECACHE_MODEL("models/v_rcontrolbomb.mdl");
+		PRECACHE_SOUND("weapons/c4_explode1.wav");
+		PRECACHE_SOUND("items/gunpickup2.wav");
+	}
 }
 
 void CCZUseTool::Spawn()
@@ -979,6 +1151,9 @@ void CCZUseTool::ToolThink()
 class CCZMissionFailure: public CBaseDelay
 {
 public:
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
 	virtual int ObjectCaps() { return 0; }
 	virtual void KeyValue(KeyValueData *pkvd);
 	virtual void Spawn() {}
@@ -992,6 +1167,19 @@ public:
 	string_t m_nextMap;
 	void EXPORT ChangeMap();
 };
+
+TYPEDESCRIPTION CCZMissionFailure::m_SaveData[] =
+{
+	DEFINE_FIELD(CCZMissionFailure, m_holdTime, FIELD_FLOAT),
+	DEFINE_FIELD(CCZMissionFailure, m_duration, FIELD_FLOAT),
+	DEFINE_FIELD(CCZMissionFailure, m_music, FIELD_STRING),
+	DEFINE_FIELD(CCZMissionFailure, m_fr, FIELD_INTEGER),
+	DEFINE_FIELD(CCZMissionFailure, m_fg, FIELD_INTEGER),
+	DEFINE_FIELD(CCZMissionFailure, m_fb, FIELD_INTEGER),
+	DEFINE_FIELD(CCZMissionFailure, m_fa, FIELD_INTEGER),
+	DEFINE_FIELD(CCZMissionFailure, m_nextMap, FIELD_STRING),
+};
+IMPLEMENT_SAVERESTORE(CCZMissionFailure, CBaseDelay)
 
 LINK_ENTITY_TO_CLASS(env_missionfailure, CCZMissionFailure, CCSMissionFailure)
 LINK_ENTITY_TO_CLASS(trigger_endmission, CCZMissionFailure, CCSMissionFailure)
