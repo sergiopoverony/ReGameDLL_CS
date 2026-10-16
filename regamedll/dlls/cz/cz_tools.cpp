@@ -466,9 +466,13 @@ public:
 	float m_holdTime;
 	float m_duration;
 	string_t m_music;
+	int m_fr, m_fg, m_fb, m_fa = 255;
+	string_t m_nextMap;
+	void EXPORT ChangeMap();
 };
 
 LINK_ENTITY_TO_CLASS(env_missionfailure, CCZMissionFailure, CCSMissionFailure)
+LINK_ENTITY_TO_CLASS(trigger_endmission, CCZMissionFailure, CCSMissionFailure)
 
 void CCZMissionFailure::KeyValue(KeyValueData *pkvd)
 {
@@ -487,6 +491,13 @@ void CCZMissionFailure::KeyValue(KeyValueData *pkvd)
 		m_music = ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if (FStrEq(pkvd->szKeyName, "fade_red")) { m_fr = Q_atoi(pkvd->szValue); pkvd->fHandled = TRUE; }
+	else if (FStrEq(pkvd->szKeyName, "fade_green")) { m_fg = Q_atoi(pkvd->szValue); pkvd->fHandled = TRUE; }
+	else if (FStrEq(pkvd->szKeyName, "fade_blue")) { m_fb = Q_atoi(pkvd->szValue); pkvd->fHandled = TRUE; }
+	else if (FStrEq(pkvd->szKeyName, "fade_alpha")) { m_fa = Q_atoi(pkvd->szValue); pkvd->fHandled = TRUE; }
+	else if (FStrEq(pkvd->szKeyName, "nextmap")) { m_nextMap = ALLOC_STRING(pkvd->szValue); pkvd->fHandled = TRUE; }
+	else if (FStrEq(pkvd->szKeyName, "message") || FStrEq(pkvd->szKeyName, "loadtime") || FStrEq(pkvd->szKeyName, "messagevolume"))
+		pkvd->fHandled = TRUE;
 	else
 		CBaseDelay::KeyValue(pkvd);
 }
@@ -502,15 +513,27 @@ void CCZMissionFailure::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_T
 	float dur = m_duration > 0 ? m_duration : 2.0f;
 	float hold = m_holdTime > 0 ? m_holdTime : 2.0f;
 
-	UTIL_ScreenFade(pl, Vector(0, 0, 0), dur, hold + 2.0f, 255, FFADE_OUT | FFADE_STAYOUT);
+	UTIL_ScreenFade(pl, Vector(m_fr, m_fg, m_fb), dur, hold + 2.0f, m_fa, FFADE_OUT | FFADE_STAYOUT);
 
 	if (!FStringNull(m_music))
 		CLIENT_COMMAND(pl->edict(), "mp3 play %s\n", STRING(m_music));
 
 	pl->EnableControl(FALSE);
 
+	if (!Q_strcmp(STRING(pev->classname), "trigger_endmission") && !FStringNull(m_nextMap))
+	{
+		SetThink(&CCZMissionFailure::ChangeMap);
+		pev->nextthink = gpGlobals->time + dur + hold + 0.5f;
+		return;
+	}
+
 	SetThink(&CCZMissionFailure::Restart);
 	pev->nextthink = gpGlobals->time + dur + hold + 3.0f;
+}
+
+void CCZMissionFailure::ChangeMap()
+{
+	CHANGE_LEVEL(STRING(m_nextMap), nullptr);
 }
 
 void CCZMissionFailure::Restart()
