@@ -6,7 +6,7 @@
 //   0 mp5, 1 shotgun, 2 law, 3 scout, 4 m4a1, 5 usp, 6 m60, 7 mac-10, 8 blank; skin 3 = SWAT uniform.
 
 bool g_czMakerSpawn = false; // set by monstermaker while it creates a monster
-static cvar_t cz_cage_drop = { "cz_cage_drop", "36", 0, 36.0f, nullptr };
+static cvar_t cz_cage_drop = { "cz_cage_drop", "100", 0, 100.0f, nullptr };
 static bool g_czCageCvar = false;
 
 

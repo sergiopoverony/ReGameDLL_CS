@@ -105,8 +105,8 @@ static bool Cz_Overlaps(CBaseEntity *a, CBaseEntity *b)
 // blowtorch effects: a flame at the tip while held, sparks + light while "firing" on a close target
 // ---------------------------------------------------------------------------
 static cvar_t cz_torch_fwd   = { "cz_torch_fwd",   "24", 0, 24.0f, nullptr };
-static cvar_t cz_torch_right = { "cz_torch_right", "7",  0, 7.0f,  nullptr };
-static cvar_t cz_torch_up    = { "cz_torch_up",    "3", 0, 3.0f, nullptr };
+static cvar_t cz_torch_right = { "cz_torch_right", "11", 0, 11.0f, nullptr };
+static cvar_t cz_torch_up    = { "cz_torch_up",    "5", 0, 5.0f, nullptr };
 static cvar_t cz_torch_scale = { "cz_torch_scale", "0.25", 0, 0.25f, nullptr };
 static bool g_czTorchCvars = false;
 
@@ -210,7 +210,8 @@ void CCZTorchFx::FxThink()
 	// visible flame at the tip of the torch (tweak with cz_torch_fwd / right / up / scale)
 	Vector tip = eye + gpGlobals->v_forward * cz_torch_fwd.value + gpGlobals->v_right * cz_torch_right.value + gpGlobals->v_up * cz_torch_up.value;
 
-	if (!flame)
+	// the flame itself is drawn by the client (CZ_TorchFlame) so it does not lag behind the view
+	if (false && !flame)
 	{
 		flame = CSprite::SpriteCreate("sprites/glow01.spr", tip, FALSE);
 		if (flame)
@@ -220,7 +221,7 @@ void CCZTorchFx::FxThink()
 		}
 	}
 
-	if (flame)
+	if (false && flame)
 	{
 		flame->pev->effects &= ~EF_NODRAW;
 		flame->pev->scale = cz_torch_scale.value * (attack ? 1.5f : 1.0f);
@@ -283,6 +284,13 @@ void CCZTorchFx::FxThink()
 // ---------------------------------------------------------------------------
 static EHANDLE g_hRcPlanted;
 static float g_flRcPlantTime = 0;
+// viewmodel sequences of v_rcontrolbomb (taken from the original demo): 0 idle, 2 draw, 6 plant press, 3 bomb placed,
+// 1 after plant, 7 detonate press, 5 explosion, 2 draw again
+static int   g_rcState = 0;      // 0 none, 1 planting, 2 planted, 3 detonating, 4 finished
+static float g_rcDue = 0;
+static float g_rcStep2 = 0;
+static Vector g_rcPos, g_rcAng;
+static void Cz_RcAnim(CBasePlayer *pl, int a) { if (pl) pl->pev->weaponanim = a; }
 
 class CCZRcPlanted: public CBaseAnimating
 {
@@ -307,12 +315,14 @@ public:
 		pev->movetype = MOVETYPE_NONE;
 		pev->effects = EF_NODRAW;
 		m_prev = true;
+		m_tEnd = 0;
 		SetThink(&CCZRcCtl::CtlThink);
 		pev->nextthink = gpGlobals->time + 0.05f;
 	}
 	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 	void EXPORT CtlThink();
 	bool m_prev;
+	float m_tEnd;
 };
 LINK_ENTITY_TO_CLASS(cz_rc_ctl, CCZRcCtl, CCSRcCtl)
 
@@ -330,41 +340,101 @@ void CCZRcCtl::CtlThink()
 	bool atk = (pl->pev->button & IN_ATTACK) != 0;
 	bool edge = atk && !m_prev;
 	m_prev = atk;
+	float now = gpGlobals->time;
 
-	CBaseEntity *bomb = g_hRcPlanted;
-	if (!edge || !bomb || gpGlobals->time < g_flRcPlantTime + 0.5f)
-		return;
-
-	// boom
-	Vector pos = bomb->pev->origin;
-	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pos);
-		WRITE_BYTE(TE_EXPLOSION);
-		WRITE_COORD(pos.x);
-		WRITE_COORD(pos.y);
-		WRITE_COORD(pos.z);
-		WRITE_SHORT(g_sModelIndexFireball);
-		WRITE_BYTE(25);
-		WRITE_BYTE(15);
-		WRITE_BYTE(0);
-	MESSAGE_END();
-	EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
-	ALERT(at_aiconsole, "rc bomb detonated at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
-
-	CBaseEntity *brk = nullptr;
-	while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
+	if (g_rcState == 1)
 	{
-		if (brk->pev->iuser4 == 2 && brk->pev->takedamage != DAMAGE_NO)
+		// bomb appears 1.07 s after the press
+		if (now >= g_rcDue)
 		{
-			ALERT(at_aiconsole, "rc bomb: breaking '%s'\n", STRING(brk->pev->targetname));
-			brk->Use(pl, pl, USE_TOGGLE, 0);
+			CBaseEntity *old = g_hRcPlanted;
+			if (old)
+				UTIL_Remove(old);
+			g_hRcPlanted = CBaseEntity::Create("cz_rc_planted", g_rcPos, g_rcAng, nullptr);
+			g_flRcPlantTime = now;
+			Cz_RcAnim(pl, 3);
+			g_rcStep2 = now + 1.33f;
+			g_rcState = 2;
+			ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f\n", g_rcPos.x, g_rcPos.y, g_rcPos.z);
 		}
+		return;
 	}
 
-	UTIL_Remove(bomb);
-	g_hRcPlanted = nullptr;
-	g_czTools &= ~CZ_ICON_RCBOMB;
-	pl->pev->viewmodel = 0;
-	Cz_SendIcons(true);
+	if (g_rcState == 2)
+	{
+		if (g_rcStep2 && now >= g_rcStep2)
+		{
+			Cz_RcAnim(pl, 1);
+			g_rcStep2 = 0;
+		}
+		if (edge && g_hRcPlanted && now >= g_flRcPlantTime + 0.5f)
+		{
+			Cz_RcAnim(pl, 7);
+			g_rcDue = now + 1.63f;
+			g_rcStep2 = now + 1.5f;
+			g_rcState = 3;
+		}
+		return;
+	}
+
+	if (g_rcState == 3)
+	{
+		if (g_rcStep2 && now >= g_rcStep2)
+		{
+			Cz_RcAnim(pl, 5);
+			g_rcStep2 = 0;
+		}
+		if (now < g_rcDue)
+			return;
+
+		CBaseEntity *bomb = g_hRcPlanted;
+		Vector pos = bomb ? bomb->pev->origin : pl->pev->origin;
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pos);
+			WRITE_BYTE(TE_EXPLOSION);
+			WRITE_COORD(pos.x);
+			WRITE_COORD(pos.y);
+			WRITE_COORD(pos.z);
+			WRITE_SHORT(g_sModelIndexFireball);
+			WRITE_BYTE(25);
+			WRITE_BYTE(15);
+			WRITE_BYTE(0);
+		MESSAGE_END();
+		if (bomb)
+			EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
+		ALERT(at_aiconsole, "rc bomb detonated at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
+
+		CBaseEntity *brk = nullptr;
+		while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
+		{
+			if (brk->pev->iuser4 == 2 && brk->pev->takedamage != DAMAGE_NO)
+			{
+				ALERT(at_aiconsole, "rc bomb: breaking '%s'\n", STRING(brk->pev->targetname));
+				brk->Use(pl, pl, USE_TOGGLE, 0);
+			}
+		}
+
+		if (bomb)
+			UTIL_Remove(bomb);
+		g_hRcPlanted = nullptr;
+		g_rcState = 4;
+		g_rcDue = now + 1.1f;     // draw again
+		g_rcStep2 = now + 2.1f;   // idle
+		m_tEnd = now + 5.5f;      // the tool is taken away
+		return;
+	}
+
+	if (g_rcState == 4)
+	{
+		if (g_rcDue && now >= g_rcDue) { Cz_RcAnim(pl, 2); g_rcDue = 0; }
+		else if (!g_rcDue && g_rcStep2 && now >= g_rcStep2) { Cz_RcAnim(pl, 0); g_rcStep2 = 0; }
+		if (now >= m_tEnd)
+		{
+			g_czTools &= ~CZ_ICON_RCBOMB;
+			pl->pev->viewmodel = 0;
+			Cz_SendIcons(true);
+			UTIL_Remove(this);
+		}
+	}
 }
 
 // the bomb tool goes into the hands; everything else is taken away
@@ -377,6 +447,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 	pl->RemoveAllItems(FALSE);
 	g_czTools = CZ_ICON_RCBOMB;
 	g_hRcPlanted = nullptr;
+	g_rcState = 0;
 
 	{
 		int len = 0;
@@ -385,7 +456,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 		{
 			FREE_FILE(f);
 			pl->pev->viewmodel = MAKE_STRING("models/v_rcontrolbomb.mdl");
-			pl->pev->weaponanim = 0;
+			pl->pev->weaponanim = 2;
 		}
 		else
 			ALERT(at_console, "tool: models/v_rcontrolbomb.mdl not found\n");
@@ -762,13 +833,14 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 			pos = guide->pev->origin;
 			ang = guide->pev->angles;
 		}
-		CBaseEntity *old = g_hRcPlanted;
-		if (old)
-			UTIL_Remove(old);
-		g_hRcPlanted = CBaseEntity::Create("cz_rc_planted", pos, ang, nullptr);
-		g_flRcPlantTime = gpGlobals->time;
-		EMIT_SOUND(ENT(pl->pev), CHAN_WEAPON, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
-		ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
+		if (g_rcState == 0)
+		{
+			g_rcPos = pos;
+			g_rcAng = ang;
+			g_rcDue = gpGlobals->time + 1.07f;
+			g_rcState = 1;
+			Cz_RcAnim(pl, 6);
+		}
 	}
 
 	if (!FStringNull(m_rcBombTarget))
