@@ -606,22 +606,17 @@ void CTriggerCDAudio::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYP
 			pEdict = pPlayer->edict();
 	}
 
-	PlayTrack(pEdict);
-
-	if (!FStringNull(m_iszTrackName) && !FStringNull(pev->targetname))
+	// CZ:DS: the trigger toggles - the second use (train01: Lead_NPC fires hostage_door again) stops the music
+	if (pev->iuser1 && pEdict)
 	{
-		CBaseEntity *pDoor = nullptr;
-		while ((pDoor = UTIL_FindEntityByTargetname(pDoor, STRING(pev->targetname))) != nullptr)
-		{
-			if (FClassnameIs(pDoor->pev, "func_door") || FClassnameIs(pDoor->pev, "func_door_rotating"))
-			{
-				m_hWatchDoor = pDoor;
-				SetThink(&CTriggerCDAudio::DoorWatch);
-				pev->nextthink = gpGlobals->time + 2.0f;
-				break;
-			}
-		}
+		CLIENT_COMMAND(pEdict, "mp3 stop\n");
+		pev->iuser1 = 0;
+		return;
 	}
+
+	PlayTrack(pEdict);
+	if (!FStringNull(m_iszTrackName))
+		pev->iuser1 = 1;
 }
 
 void CTriggerCDAudio::DoorWatch()

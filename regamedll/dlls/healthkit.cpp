@@ -148,7 +148,8 @@ void CWallHealth::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 		pActivator->TakeHealth(50, DMG_GENERIC);
 		EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/medshot4.wav", VOL_NORM, ATTN_NORM);
 		m_iCzUses++;
-		pev->frame = (float)m_iCzUses;
+		// brush frame != 0 selects the alternate (empty) texture set: only after the last use
+		pev->frame = (m_iCzUses >= 2) ? 1.0f : 0.0f;
 		return;
 	}
 

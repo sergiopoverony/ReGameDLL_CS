@@ -339,6 +339,11 @@ void CWorld::Precache()
 	PRECACHE_SOUND("common/bodydrop3.wav");
 	PRECACHE_SOUND("common/bodydrop4.wav");
 
+	// shell casings: the client looks these up by name when a weapon fires
+	PRECACHE_MODEL("models/rshell.mdl");
+	PRECACHE_MODEL("models/pshell.mdl");
+	PRECACHE_MODEL("models/shotgunshell.mdl");
+
 	g_Language = int(CVAR_GET_FLOAT("sv_language"));
 	if (g_Language == LANGUAGE_GERMAN)
 	{

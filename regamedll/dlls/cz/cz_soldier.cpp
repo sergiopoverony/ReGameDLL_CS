@@ -16,6 +16,8 @@ public:
 public:
 	void EXPORT AnimThink();
 	void PlayAnim(const char *name);
+	void Settle();
+	bool m_bPlatMoved;
 	void React(int type); // 1 = flashbang, 2 = smoke grenade
 
 	int m_head;
@@ -244,44 +246,9 @@ void CCZSoldier::Spawn()
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72));
 	UTIL_SetOrigin(pev, pev->origin);
 
-	// CZ: soldier made inside a moving cage/lift (train02): ride on that platform
 	m_hPlat = nullptr;
-	{
-		CBaseEntity *best = nullptr;
-		float bestD = 99999.0f;
-		CBaseEntity *pEnt = nullptr;
-		while ((pEnt = UTIL_FindEntityInSphere(pEnt, pev->origin, 256.0f)) != nullptr)
-		{
-			if (FNullEnt(pEnt->edict()) || pEnt->pev == pev || !pEnt->pev->classname || pEnt->pev->movetype != MOVETYPE_PUSH)
-				continue;
-
-			const char *cn = STRING(pEnt->pev->classname);
-			if (Q_strncmp(cn, "func_door", 9) && Q_strcmp(cn, "func_plat") && Q_strcmp(cn, "func_train") && Q_strcmp(cn, "func_platrot"))
-				continue;
-
-			const Vector &o = pev->origin;
-			if (o.x < pEnt->pev->absmin.x - 24 || o.x > pEnt->pev->absmax.x + 24 || o.y < pEnt->pev->absmin.y - 24 || o.y > pEnt->pev->absmax.y + 24)
-				continue;
-			if (o.z < pEnt->pev->absmin.z - 72 || o.z > pEnt->pev->absmax.z + 16)
-				continue;
-
-			float d = fabsf(pEnt->pev->absmax.z - o.z);
-			if (d < bestD)
-			{
-				bestD = d;
-				best = pEnt;
-			}
-		}
-
-		if (best)
-		{
-			m_hPlat = best;
-			m_platOfs = pev->origin - best->pev->origin;
-			ALERT(at_console, "soldier: rides on %s (%s) ofs z %.0f\n", STRING(best->pev->classname), STRING(best->pev->targetname), m_platOfs.z);
-		}
-		else
-			ALERT(at_console, "soldier: no platform under %.0f %.0f %.0f\n", pev->origin.x, pev->origin.y, pev->origin.z);
-	}
+	m_bPlatMoved = false;
+	Settle();
 
 	InitBoneControllers();
 
@@ -302,6 +269,38 @@ void CCZSoldier::Spawn()
 
 	SetThink(&CCZSoldier::AnimThink);
 	pev->nextthink = gpGlobals->time + 0.1f;
+}
+
+// CZ: a soldier made inside a moving cage/lift (train02) must stand on its floor and ride it.
+void CCZSoldier::Settle()
+{
+	// get out of solid geometry
+	for (int i = 0; i < 32; i++)
+	{
+		TraceResult t;
+		UTIL_TraceHull(pev->origin + Vector(0, 0, 36), pev->origin + Vector(0, 0, 36), ignore_monsters, human_hull, ENT(pev), &t);
+		if (!t.fStartSolid && !t.fAllSolid)
+			break;
+		pev->origin.z += 4;
+	}
+
+	UTIL_SetOrigin(pev, pev->origin);
+	DROP_TO_FLOOR(ENT(pev));
+
+	m_hPlat = nullptr;
+
+	// what are we standing on?
+	TraceResult tr;
+	UTIL_TraceHull(pev->origin + Vector(0, 0, 36), pev->origin + Vector(0, 0, 28), ignore_monsters, human_hull, ENT(pev), &tr);
+	CBaseEntity *h = CBaseEntity::Instance(tr.pHit);
+	if (h && h->pev->movetype == MOVETYPE_PUSH && h->pev->solid != SOLID_NOT)
+	{
+		m_hPlat = h;
+		m_platOfs = pev->origin - h->pev->origin;
+		ALERT(at_console, "soldier: stands on %s (%s), origin %.0f %.0f %.0f\n", STRING(h->pev->classname), STRING(h->pev->targetname), pev->origin.x, pev->origin.y, pev->origin.z);
+	}
+	else
+		ALERT(at_console, "soldier: no moving platform under %.0f %.0f %.0f\n", pev->origin.x, pev->origin.y, pev->origin.z);
 }
 
 void CCZSoldier::PlayAnim(const char *name)
@@ -390,7 +389,17 @@ void CCZSoldier::AnimThink()
 	CBaseEntity *plat = m_hPlat;
 	if (plat)
 	{
-		UTIL_SetOrigin(pev, plat->pev->origin + m_platOfs);
+		if (plat->pev->velocity.Length() > 1.0f)
+		{
+			m_bPlatMoved = true;
+			UTIL_SetOrigin(pev, plat->pev->origin + m_platOfs);
+		}
+		else if (m_bPlatMoved)
+		{
+			m_bPlatMoved = false;
+			Settle(); // the lift has stopped: stand firmly on its floor
+		}
+
 		pev->nextthink = gpGlobals->time + 0.02f;
 		return;
 	}
@@ -479,9 +488,7 @@ void CCZMonsterMaker::Spawn()
 	if (!FStringNull(m_iszMonsterType))
 		UTIL_PrecacheOther(STRING(m_iszMonsterType));
 
-	// CZ: maker with no trigger starts on its own (nobody targets spawn_CT in train02)
-	if (!FStringNull(m_iszMonsterType))
-		pev->nextthink = gpGlobals->time + 0.5f;
+	// the maker waits for its trigger (train02: cz_train02.seq Round4_Start fires spawn_CT)
 }
 
 void CCZMonsterMaker::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)

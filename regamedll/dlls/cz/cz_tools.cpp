@@ -111,9 +111,12 @@ public:
 	virtual void Precache();
 	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 	void EXPORT PickupTouch(CBaseEntity *pOther);
+	void EXPORT PickupThink();
+	void Pickup(CBaseEntity *pOther);
 
 	int m_bit;
 	const char *m_model;
+	const char *m_vmodel;
 };
 
 LINK_ENTITY_TO_CLASS(weapon_camera, CCZToolPickup, CCSCzToolPickup)
@@ -125,6 +128,21 @@ void CCZToolPickup::Precache()
 	PRECACHE_MODEL("models/w_camera.mdl");
 	PRECACHE_MODEL("models/w_btorch.mdl");
 	PRECACHE_MODEL("models/w_focamera.mdl");
+	{
+		static const char *vm[] = { "models/v_camera.mdl", "models/v_btorch.mdl", "models/v_focamera.mdl" };
+		for (const char *m : vm)
+		{
+			int len = 0;
+			byte *f = LOAD_FILE_FOR_ME(m, &len);
+			if (f)
+			{
+				FREE_FILE(f);
+				PRECACHE_MODEL(m);
+			}
+			else
+				ALERT(at_console, "tool: %s not found\n", m);
+		}
+	}
 	PRECACHE_SOUND("items/gunpickup2.wav");
 }
 
@@ -138,16 +156,19 @@ void CCZToolPickup::Spawn()
 	{
 		m_bit = CZ_ICON_TORCH;
 		m_model = "models/w_btorch.mdl";
+		m_vmodel = "models/v_btorch.mdl";
 	}
 	else if (!Q_strcmp(cls, "weapon_fiberopticcamera"))
 	{
 		m_bit = CZ_ICON_FIBER;
 		m_model = "models/w_focamera.mdl";
+		m_vmodel = "models/v_focamera.mdl";
 	}
 	else
 	{
 		m_bit = CZ_ICON_CAMERA;
 		m_model = "models/w_camera.mdl";
+		m_vmodel = "models/v_camera.mdl";
 	}
 
 	SET_MODEL(ENT(pev), m_model);
@@ -158,6 +179,28 @@ void CCZToolPickup::Spawn()
 	DROP_TO_FLOOR(ENT(pev));
 
 	SetTouch(&CCZToolPickup::PickupTouch);
+
+	// backup for a touch that never fires: pick up when the player stands next to the tool
+	SetThink(&CCZToolPickup::PickupThink);
+	pev->nextthink = gpGlobals->time + 0.5f;
+
+	ALERT(at_console, "tool pickup %s at %.0f %.0f %.0f\n", cls, pev->origin.x, pev->origin.y, pev->origin.z);
+}
+
+void CCZToolPickup::PickupThink()
+{
+	CBasePlayer *pl = Cz_Player();
+	if (pl && pl->IsAlive())
+	{
+		Vector d = pl->pev->origin - pev->origin;
+		if (Vector(d.x, d.y, 0).Length() < 44.0f && fabsf(d.z) < 72.0f)
+		{
+			Pickup(pl);
+			return;
+		}
+	}
+
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
 void CCZToolPickup::PickupTouch(CBaseEntity *pOther)
@@ -165,7 +208,24 @@ void CCZToolPickup::PickupTouch(CBaseEntity *pOther)
 	if (!pOther || !pOther->IsPlayer() || !pOther->IsAlive())
 		return;
 
+	Pickup(pOther);
+}
+
+void CCZToolPickup::Pickup(CBaseEntity *pOther)
+{
 	g_czTools |= m_bit;
+
+	// the tool is in the hands now
+	{
+		int len = 0;
+		byte *f = LOAD_FILE_FOR_ME(m_vmodel, &len);
+		if (f)
+		{
+			FREE_FILE(f);
+			pOther->pev->viewmodel = MAKE_STRING(m_vmodel);
+			pOther->pev->weaponanim = 0;
+		}
+	}
 	EMIT_SOUND(ENT(pOther->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 	ALERT(at_aiconsole, "tool picked up: %s (mask %d)\n", STRING(pev->classname), g_czTools);
 	Cz_SendIcons(true);

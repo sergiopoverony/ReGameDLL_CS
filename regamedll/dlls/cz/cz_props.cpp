@@ -30,6 +30,8 @@ public:
 
 	void ApplySequence(const char *name);
 	void EXPORT HideIfAppearTarget();
+	void EXPORT AnimThink();
+	bool m_bAnimated = false;
 
 	string_t m_sequenceName;
 	int m_removeOnUse;
@@ -106,12 +108,41 @@ void CItemGeneric::Spawn()
 	ApplySequence(FStringNull(m_sequenceName) ? "idle" : STRING(m_sequenceName));
 	m_spawned = 1;
 
+	// multi-frame sequences are advanced by the server (the client does not animate a prop on its own)
+	{
+		studiohdr_t *pstudiohdr = (studiohdr_t *)GET_MODEL_PTR(ENT(pev));
+		if (pstudiohdr && pev->sequence >= 0 && pev->sequence < pstudiohdr->numseq)
+		{
+			mstudioseqdesc_t *pseq = (mstudioseqdesc_t *)((byte *)pstudiohdr + pstudiohdr->seqindex) + pev->sequence;
+			m_bAnimated = pseq->numframes > 1 && pev->framerate > 0.0f;
+		}
+	}
+
+	if (m_bAnimated)
+	{
+		SetThink(&CItemGeneric::AnimThink);
+		pev->nextthink = gpGlobals->time + 0.1f;
+	}
+
 	// display items that a map shows later with an env_render ("appear") start hidden
 	if (!FStringNull(pev->targetname))
 	{
 		SetThink(&CItemGeneric::HideIfAppearTarget);
 		pev->nextthink = gpGlobals->time + 0.3f;
 	}
+}
+
+void CItemGeneric::AnimThink()
+{
+	StudioFrameAdvance();
+
+	if (m_fSequenceFinished && !m_fSequenceLoops)
+	{
+		pev->frame = 0;
+		ResetSequenceInfo();
+	}
+
+	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
 void CItemGeneric::HideIfAppearTarget()
@@ -129,6 +160,14 @@ void CItemGeneric::HideIfAppearTarget()
 			break;
 		}
 	}
+
+	if (m_bAnimated)
+	{
+		SetThink(&CItemGeneric::AnimThink);
+		pev->nextthink = gpGlobals->time + 0.1f;
+	}
+	else
+		pev->nextthink = 0;
 }
 
 void CItemGeneric::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
@@ -681,15 +720,30 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	// if the straight direction is blocked try to steer around
 	Vector dir(flat.x / d, flat.y / d, 0);
 	{
-		static const float angles[] = { 0, 30, -30, 60, -60, 90, -90 };
+		static const float angles[] = { 0, 25, -25, 50, -50, 75, -75, 100, -100 };
 		bool found = false;
 		float baseYaw = UTIL_VecToYaw(dir);
 
 		pev->flags |= FL_ONGROUND;
 
-		for (int i = 0; i < 7 && !found; i++)
+		for (int i = 0; i < 9 && !found; i++)
 		{
 			float yaw = baseYaw + angles[i];
+
+			// look ahead ~56 units (anything solid, incl. props and other monsters) so we turn before touching it
+			float a2 = yaw * (M_PI / 180.0f);
+			Vector st = pev->origin + Vector(0, 0, 56.0f);
+			Vector en = st + Vector(cos(a2), sin(a2), 0) * 56.0f;
+			TraceResult tr;
+			TRACE_MONSTER_HULL(ENT(pev), st, en, dont_ignore_monsters, ENT(pev), &tr);
+			if (tr.flFraction < 1.0f && !tr.fStartSolid)
+			{
+				if (i == 0 && tr.pHit && m_flStuckSince != 0.0f)
+					ALERT(at_aiconsole, "npc blocked by %s\n", STRING(tr.pHit->v.classname));
+				if (i < 8)
+					continue;
+			}
+
 			if (WALK_MOVE(ENT(pev), yaw, step, WALKMOVE_NORMAL))
 			{
 				float a = yaw * (M_PI / 180.0f);
