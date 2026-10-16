@@ -121,7 +121,10 @@ static void Cz_SendIcons(bool force = false)
 		if (g_czZoneCnt[i] > 0)
 			a |= (1 << i);
 
-	int c = a & g_czTools;
+	// like the original: (icons shown, icons active = player is in the zone, tools owned);
+	// an owned tool icon is always shown, red outside its zone and green inside
+	int c = g_czTools;
+	int shown = a | (c & (CZ_ICON_CAMERA | CZ_ICON_FIBER | CZ_ICON_RCBOMB | CZ_ICON_TORCH));
 	if (!force && a == g_czLastA && c == g_czLastC)
 		return;
 
@@ -130,8 +133,8 @@ static void Cz_SendIcons(bool force = false)
 	Cz_EnsureStateFwd();
 
 	MESSAGE_BEGIN(MSG_ONE, gmsgHudIcons, nullptr, pl->pev);
+		WRITE_SHORT(shown);
 		WRITE_SHORT(a);
-		WRITE_SHORT(c);
 		WRITE_SHORT(c);
 	MESSAGE_END();
 }
@@ -744,6 +747,10 @@ void Cz_StripTools()
 	g_rcState = 0;
 	g_rcCharges = 5;
 	g_rcHold = 0;
+	// forget the tool zones the player was standing in (they may have been removed meanwhile); the rescue zone (bit 10) stays
+	for (int i = 0; i < 16; i++)
+		if (i != 10)
+			g_czZoneCnt[i] = 0;
 	Q_memset(g_tQ, 0, sizeof(g_tQ));
 	if (pl)
 		pl->pev->viewmodel = 0;
@@ -924,6 +931,7 @@ public:
 	EHANDLE m_hViewer;
 	int m_zoom = 0;
 	Vector m_viewAng;
+	Vector m_baseAng;
 	int m_moveType = 0;
 	float m_tStart = 0;
 	bool m_prev1 = true, m_prev2 = true;
@@ -934,6 +942,7 @@ TYPEDESCRIPTION CCZInfoCamera::m_SaveData[] =
 	DEFINE_FIELD(CCZInfoCamera, m_hViewer, FIELD_EHANDLE),
 	DEFINE_FIELD(CCZInfoCamera, m_zoom, FIELD_INTEGER),
 	DEFINE_FIELD(CCZInfoCamera, m_viewAng, FIELD_VECTOR),
+	DEFINE_FIELD(CCZInfoCamera, m_baseAng, FIELD_VECTOR),
 	DEFINE_FIELD(CCZInfoCamera, m_moveType, FIELD_INTEGER),
 	DEFINE_FIELD(CCZInfoCamera, m_tStart, FIELD_TIME),
 };
@@ -979,6 +988,7 @@ void CCZInfoCamera::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE 
 		pev->angles.x = -pev->angles.x;
 	}
 
+	m_baseAng = pev->angles;
 	m_hViewer = pl;
 	g_fiberOn = true;
 	m_zoom = 0;
@@ -1005,7 +1015,7 @@ void CCZInfoCamera::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE 
 	pev->nextthink = gpGlobals->time + 0.02f;
 }
 
-// while viewing: the view cannot be turned, right button = zoom, left button = leave
+// while viewing: the view turns within limits, right button = zoom, left button = leave
 void CCZInfoCamera::EndView()
 {
 	CBasePlayer *pl = Cz_Player();
@@ -1022,9 +1032,35 @@ void CCZInfoCamera::EndView()
 	bool a1 = (pl->pev->button & IN_ATTACK) != 0;
 	bool a2 = (pl->pev->button & IN_ATTACK2) != 0;
 	pl->pev->velocity = g_vecZero;
-	pl->pev->angles = m_viewAng;
-	pl->pev->v_angle = m_viewAng;
-	pl->pev->fixangle = 1;
+
+	// the view can be turned within limited angles around the direction to the target
+	{
+		static bool reg = false;
+		static cvar_t cvYaw = { "cz_fiber_yaw", "35", 0, 35.0f, nullptr };
+		static cvar_t cvPitch = { "cz_fiber_pitch", "25", 0, 25.0f, nullptr };
+		if (!reg)
+		{
+			reg = true;
+			CVAR_REGISTER(&cvYaw);
+			CVAR_REGISTER(&cvPitch);
+		}
+		float ly = cvYaw.value > 0 ? cvYaw.value : 35.0f;
+		float lp = cvPitch.value > 0 ? cvPitch.value : 25.0f;
+		float dy = UTIL_AngleDiff(pl->pev->v_angle.y, m_viewAng.y);
+		float dp = UTIL_AngleDiff(pl->pev->v_angle.x, m_viewAng.x);
+		float cy = dy < -ly ? -ly : (dy > ly ? ly : dy);
+		float cp = dp < -lp ? -lp : (dp > lp ? lp : dp);
+		pev->angles.y = UTIL_AngleMod(m_baseAng.y + cy);
+		pev->angles.x = m_baseAng.x + cp;
+		pev->angles.z = 0;
+		if (cy != dy || cp != dp)
+		{
+			pl->pev->v_angle.y = UTIL_AngleMod(m_viewAng.y + cy);
+			pl->pev->v_angle.x = m_viewAng.x + cp;
+			pl->pev->angles = pl->pev->v_angle;
+			pl->pev->fixangle = 1;
+		}
+	}
 
 	// ignore the press that started the view
 	if (gpGlobals->time < m_tStart + 0.4f)
@@ -1053,6 +1089,9 @@ void CCZInfoCamera::EndView()
 		return;
 
 	SET_VIEW(pl->edict(), pl->edict());
+	pl->pev->v_angle = m_viewAng;
+	pl->pev->angles = m_viewAng;
+	pl->pev->fixangle = 1;
 	pl->pev->movetype = m_moveType ? m_moveType : MOVETYPE_WALK;
 	Cz_SetFov(pl, 90);
 	MESSAGE_BEGIN(MSG_ONE, gmsgCzFiber, nullptr, pl->pev);

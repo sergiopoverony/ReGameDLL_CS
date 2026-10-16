@@ -7,6 +7,7 @@
 
 bool g_czMakerSpawn = false; // set by monstermaker while it creates a monster
 static cvar_t cz_cage_drop = { "cz_cage_drop", "100", 0, 100.0f, nullptr };
+static cvar_t cz_grenade_react = { "cz_grenade_react_radius", "700", 0, 700.0f, nullptr };
 static bool g_czCageCvar = false;
 
 
@@ -547,8 +548,15 @@ void CCZSoldier::AnimThink()
 // called from CGrenade: type 1 = flashbang exploded, 2 = smoke grenade exploded
 void Cz_GrenadeEvent(const Vector &origin, int type)
 {
+	static bool reg = false;
+	if (!reg)
+	{
+		reg = true;
+		CVAR_REGISTER(&cz_grenade_react);
+	}
+	float radius = cz_grenade_react.value > 0 ? cz_grenade_react.value : 700.0f;
 	CBaseEntity *pEnt = nullptr;
-	while ((pEnt = UTIL_FindEntityInSphere(pEnt, origin, 900.0f)) != nullptr)
+	while ((pEnt = UTIL_FindEntityInSphere(pEnt, origin, radius)) != nullptr)
 	{
 		if (FNullEnt(pEnt->edict()) || !pEnt->pev->classname)
 			continue;
