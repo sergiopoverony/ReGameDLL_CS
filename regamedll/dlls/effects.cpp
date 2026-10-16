@@ -1085,7 +1085,8 @@ IMPLEMENT_SAVERESTORE(CGlow, CPointEntity)
 
 // CZ:DS maps use big env_glow scales (5..7); the Xash glow renderer makes them far too bright/large
 static cvar_t cz_glow_scale = { "cz_glow_scale", "0.17", 0, 0.17f, nullptr };
-static cvar_t cz_glow_mode = { "cz_glow_mode", "2", 0, 2.0f, nullptr }; // 0 = keep glow, else a render mode (2 texture, 4 alpha, 5 additive)
+static cvar_t cz_glow_mode = { "cz_glow_mode", "0", 0, 0.0f, nullptr }; // 0 = keep glow, else a render mode (2 texture, 4 alpha, 5 additive)
+static cvar_t cz_glow_scale_far = { "cz_glow_scale_far", "0.35", 0, 0.35f, nullptr };
 static bool g_czGlowCvar = false;
 
 void CGlow::Spawn()
@@ -1094,6 +1095,7 @@ void CGlow::Spawn()
 	{
 		CVAR_REGISTER(&cz_glow_scale);
 		CVAR_REGISTER(&cz_glow_mode);
+		CVAR_REGISTER(&cz_glow_scale_far);
 		g_czGlowCvar = true;
 	}
 
@@ -1131,8 +1133,13 @@ void CGlow::Think()
 		if (!pStart)
 			pStart = UTIL_FindEntityByClassname(nullptr, "info_player_deathmatch");
 
-		if (pStart && pev->scale > 0.0f && (pev->origin - pStart->pev->origin).Length() < 700.0f)
-			pev->scale *= CVAR_GET_FLOAT("cz_glow_scale");
+		if (pev->scale > 0.0f)
+		{
+			if (pStart && (pev->origin - pStart->pev->origin).Length() < 700.0f)
+				pev->scale *= CVAR_GET_FLOAT("cz_glow_scale");
+			else
+				pev->scale *= CVAR_GET_FLOAT("cz_glow_scale_far");
+		}
 
 		// the retail engine blends these sprites, the Xash glow mode makes them additive and much brighter
 		int mode = (int)CVAR_GET_FLOAT("cz_glow_mode");

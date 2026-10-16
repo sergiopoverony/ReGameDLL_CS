@@ -278,6 +278,31 @@ void CCZSoldier::Spawn()
 }
 
 // CZ: a soldier made inside a moving cage/lift (train02) must stand on its floor and ride it.
+// floor under the cage: the firing-range shutters (gunrange_door*) open later, never count them as floor or lift
+static bool Cz_IsShutter(CBaseEntity *e)
+{
+	return e && e->pev->targetname && Q_strstr(STRING(e->pev->targetname), "gunrange");
+}
+
+static void Cz_TraceFloor(const Vector &from, float down, edict_t *skip, TraceResult &tr)
+{
+	CBaseEntity *sh[16];
+	int ns = 0;
+	CBaseEntity *e = nullptr;
+	while (ns < 16 && (e = UTIL_FindEntityByClassname(e, "func_door")) != nullptr)
+	{
+		if (Cz_IsShutter(e) && e->pev->solid != SOLID_NOT)
+		{
+			sh[ns++] = e;
+			e->pev->iuser3 = e->pev->solid;
+			e->pev->solid = SOLID_NOT;
+		}
+	}
+	UTIL_TraceLine(from, from - Vector(0, 0, down), ignore_monsters, skip, &tr);
+	for (int i = 0; i < ns; i++)
+		sh[i]->pev->solid = sh[i]->pev->iuser3;
+}
+
 void CCZSoldier::Settle()
 {
 	if (m_bMade)
@@ -290,6 +315,8 @@ void CCZSoldier::Settle()
 		CBaseEntity *e = nullptr;
 		while ((e = UTIL_FindEntityByClassname(e, "func_door")) != nullptr)
 		{
+			if (Cz_IsShutter(e))
+				continue;
 			Vector mn = e->pev->absmin, mx = e->pev->absmax;
 			if (pev->origin.x < mn.x - 8 || pev->origin.x > mx.x + 8 || pev->origin.y < mn.y - 8 || pev->origin.y > mx.y + 8)
 				continue;
@@ -360,7 +387,7 @@ void CCZSoldier::Settle()
 void CCZSoldier::StandOnFloor()
 {
 	TraceResult tr;
-	UTIL_TraceLine(pev->origin + Vector(0, 0, 24), pev->origin - Vector(0, 0, 300), ignore_monsters, ENT(pev), &tr);
+	Cz_TraceFloor(pev->origin + Vector(0, 0, 24), 324.0f, ENT(pev), tr);
 	if (tr.fStartSolid || tr.flFraction >= 1.0f)
 		return;
 
@@ -494,6 +521,23 @@ void CCZSoldier::AnimThink()
 		{
 			m_bPlatMoved = false;
 			Settle(); // the lift has stopped: stand firmly on its floor
+		}
+
+		if (m_bMade && m_flSettleAt < 0)
+		{
+			// settled on the cage: never hang in the air if the floor goes away or the shutters move
+			TraceResult ft;
+			Cz_TraceFloor(pev->origin + Vector(0, 0, 8), 400.0f, ENT(pev), ft);
+			if (!ft.fStartSolid && ft.flFraction < 1.0f)
+			{
+				float gap = pev->origin.z - ft.vecEndPos.z;
+				if (gap > 0.5f)
+				{
+					pev->origin.z -= (gap < 12.0f ? gap : 12.0f);
+					UTIL_SetOrigin(pev, pev->origin);
+					m_platOfs = pev->origin - plat->pev->origin;
+				}
+			}
 		}
 
 		pev->nextthink = gpGlobals->time + 0.02f;

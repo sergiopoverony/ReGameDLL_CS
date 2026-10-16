@@ -391,6 +391,7 @@ public:
 	float m_flSitApplied;
 	float m_flMoveYaw;
 	float m_flBiasD0 = 0;
+	float m_flBiasCur = 0;
 	float m_flYawBias = 0; // original quirk: a scripted walk starts ~35 deg to the left of the goal and straightens out
 	float m_flLastMove;
 	float m_flStuckSince;
@@ -679,12 +680,18 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		// walk off to the left of the goal until half of the way is done, then turn to it
 		if (m_flBiasD0 <= 0.0f)
 			m_flBiasD0 = d;
-		if (d < m_flBiasD0 * 0.5f || d < 96.0f)
-			m_flYawBias = 0.0f;
+		// smooth blend: full bias until 65% of the leg remains, none at 35%
+		float t = (d - m_flBiasD0 * 0.35f) / (m_flBiasD0 * 0.30f);
+		t = t < 0 ? 0 : (t > 1 ? 1 : t);
+		if (d < 96.0f)
+			t = 0;
+		m_flBiasCur = m_flYawBias * t * t * (3.0f - 2.0f * t);
 	}
+	else
+		m_flBiasCur = 0.0f;
 
-	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) + m_flYawBias : m_flMoveYaw;
-	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, 540.0f * dt);
+	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) + m_flBiasCur : m_flMoveYaw;
+	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, (m_flYawBias > 0.0f ? 140.0f : 540.0f) * dt);
 
 	if (finalLeg && (d <= stopDist || d <= step + 1.0f))
 	{
@@ -733,7 +740,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	{
 		static const float angles[] = { 0, 25, -25, 50, -50, 75, -75, 100, -100 };
 		bool found = false;
-		float baseYaw = UTIL_VecToYaw(dir) + m_flYawBias;
+		float baseYaw = UTIL_VecToYaw(dir) + m_flBiasCur;
 
 		pev->flags |= FL_ONGROUND;
 
@@ -1046,7 +1053,8 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (m_fMoveTo == 1 || m_fMoveTo == 2)
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
-		npc->m_flYawBias = 35.0f;
+		// original quirk belongs to the red-shirt worker only
+		npc->m_flYawBias = FStrEq(STRING(npc->pev->targetname), "worker_walk1") ? 38.0f : 0.0f;
 		npc->m_flBiasD0 = 0.0f;
 
 		m_state = 1;

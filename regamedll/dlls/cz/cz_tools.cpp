@@ -622,6 +622,31 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 			UTIL_Remove(pBomb);
 	}
 
+	if (m_need == CZ_ICON_TORCH)
+	{
+		// the lock is protected by an invisible func_breakable that only the torch can damage: burn it through
+		CBaseEntity *lock = Cz_AimedLock(pl, 130.0f);
+		Vector c = lock ? lock->pev->origin : pl->pev->origin;
+		CBaseEntity *brk = nullptr;
+		while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
+		{
+			Vector bc = (brk->pev->absmin + brk->pev->absmax) * 0.5f;
+			if ((bc - c).Length() < 150.0f && brk->pev->takedamage != DAMAGE_NO)
+			{
+				ALERT(at_aiconsole, "torch: breaking '%s'\n", STRING(brk->pev->targetname));
+				brk->Use(pl, pl, USE_TOGGLE, 0);
+			}
+		}
+		if (lock)
+			UTIL_Remove(lock); // the padlock model itself
+		m_done = true;
+		if (m_inside)
+		{
+			Cz_ZoneLeave(m_iconBits);
+			m_inside = false;
+		}
+	}
+
 	SUB_UseTargets(pl, USE_TOGGLE, 0);
 
 	if (pev->spawnflags & 1)
@@ -655,7 +680,7 @@ void CCZUseTool::ToolThink()
 		m_holdStart = 0;
 	}
 
-	if (m_stealth || !inside || (FStringNull(pev->target) && FStringNull(m_toolTarget) && FStringNull(m_rcBombTarget)))
+	if (m_stealth || !inside || (m_need != CZ_ICON_TORCH && FStringNull(pev->target) && FStringNull(m_toolTarget) && FStringNull(m_rcBombTarget)))
 		return;
 
 	if (m_need && !(g_czTools & m_need))
