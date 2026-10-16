@@ -1136,14 +1136,30 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (m_fMoveTo == 1 || m_fMoveTo == 2)
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
-		// original quirk belongs to the red-shirt worker only
+		// the red-shirt worker of cz_train01 walks the original routes (waypoints measured from the original demo)
+		npc->m_flYawBias = 0.0f;
+		if (FStrEq(STRING(npc->pev->targetname), "worker_walk1"))
 		{
-		// the red shirt arcs by a different angle on each leg (user's route table); after the 6th leg the cycle returns to leg 2
-		static const float kBias[6] = { 0.0f, 38.0f, 15.0f, 40.0f, 38.0f, 0.0f };
-		int k = npc->m_nWalks;
-		int idx = k < 6 ? k : 2 + (k - 6) % 4;
-		npc->m_flYawBias = FStrEq(STRING(npc->pev->targetname), "worker_walk1") ? kBias[idx] : 0.0f;
-	}
+			struct leg_t { const char *dest; int n; float p[3][2]; };
+			static const leg_t legs[] =
+			{
+				{ "worker_sequence1", 0, {} },
+				{ "worker_sequence2", 1, { { -250, -154 } } },
+				{ "worker_sequence4", 2, { { -105, -200 }, { 34, -91 } } },
+				{ "worker_sequence3", 2, { { 69, -58 }, { -183, -50 } } },
+				{ "worker_sequence5", 2, { { -220, -41 }, { -452, -174 } } },
+			};
+			for (const leg_t &l : legs)
+			{
+				if (!FStrEq(STRING(pev->targetname), l.dest))
+					continue;
+				npc->m_nPath = l.n;
+				npc->m_iPath = 0;
+				for (int i = 0; i < l.n; i++)
+					npc->m_path[i] = Vector(l.p[i][0], l.p[i][1], npc->pev->origin.z);
+				break;
+			}
+		}
 		npc->m_nWalks++;
 		npc->m_bGhost = FStrEq(STRING(npc->pev->targetname), "worker_walk1");
 		npc->m_flBiasD0 = 0.0f;
