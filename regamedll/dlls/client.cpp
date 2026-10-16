@@ -3817,8 +3817,11 @@ void EXT_FUNC ServerDeactivate()
 	WeaponInfoReset();
 }
 
+void Cz_ServerActivate();
+
 void EXT_FUNC ServerActivate(edict_t *pEdictList, int edictCount, int clientMax)
 {
+	Cz_ServerActivate();
 	g_pEdicts = pEdictList;
 
 #ifdef REGAMEDLL_ADD
