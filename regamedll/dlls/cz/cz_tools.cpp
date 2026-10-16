@@ -70,6 +70,14 @@ static void Cz_SendIcons(bool force = false)
 	MESSAGE_END();
 }
 
+// rescue zone indicator (bit 1024) - sent the same way as the original game does (HudIcons)
+void Cz_RescueIcon(bool on)
+{
+	Cz_ToolsNewMap();
+	g_czZoneCnt[10] = on ? 1 : 0;
+	Cz_SendIcons(true);
+}
+
 static void Cz_ZoneEnter(int bits)
 {
 	for (int i = 0; i < 16; i++)

@@ -19,6 +19,8 @@ public:
 	void React(int type); // 1 = flashbang, 2 = smoke grenade
 
 	int m_head;
+	EHANDLE m_hPlat;
+	Vector m_platOfs;
 	int m_react;
 	int m_step;
 	float m_stepTime;
@@ -242,6 +244,45 @@ void CCZSoldier::Spawn()
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72));
 	UTIL_SetOrigin(pev, pev->origin);
 
+	// CZ: soldier made inside a moving cage/lift (train02): ride on that platform
+	m_hPlat = nullptr;
+	{
+		CBaseEntity *best = nullptr;
+		float bestD = 99999.0f;
+		CBaseEntity *pEnt = nullptr;
+		while ((pEnt = UTIL_FindEntityInSphere(pEnt, pev->origin, 256.0f)) != nullptr)
+		{
+			if (FNullEnt(pEnt->edict()) || pEnt->pev == pev || !pEnt->pev->classname || pEnt->pev->movetype != MOVETYPE_PUSH)
+				continue;
+
+			const char *cn = STRING(pEnt->pev->classname);
+			if (Q_strncmp(cn, "func_door", 9) && Q_strcmp(cn, "func_plat") && Q_strcmp(cn, "func_train") && Q_strcmp(cn, "func_platrot"))
+				continue;
+
+			const Vector &o = pev->origin;
+			if (o.x < pEnt->pev->absmin.x - 24 || o.x > pEnt->pev->absmax.x + 24 || o.y < pEnt->pev->absmin.y - 24 || o.y > pEnt->pev->absmax.y + 24)
+				continue;
+			if (o.z < pEnt->pev->absmin.z - 72 || o.z > pEnt->pev->absmax.z + 16)
+				continue;
+
+			float d = fabsf(pEnt->pev->absmax.z - o.z);
+			if (d < bestD)
+			{
+				bestD = d;
+				best = pEnt;
+			}
+		}
+
+		if (best)
+		{
+			m_hPlat = best;
+			m_platOfs = pev->origin - best->pev->origin;
+			ALERT(at_console, "soldier: rides on %s (%s) ofs z %.0f\n", STRING(best->pev->classname), STRING(best->pev->targetname), m_platOfs.z);
+		}
+		else
+			ALERT(at_console, "soldier: no platform under %.0f %.0f %.0f\n", pev->origin.x, pev->origin.y, pev->origin.z);
+	}
+
 	InitBoneControllers();
 
 	const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
@@ -344,6 +385,14 @@ void CCZSoldier::AnimThink()
 	{
 		pev->frame = 0;
 		ResetSequenceInfo();
+	}
+
+	CBaseEntity *plat = m_hPlat;
+	if (plat)
+	{
+		UTIL_SetOrigin(pev, plat->pev->origin + m_platOfs);
+		pev->nextthink = gpGlobals->time + 0.02f;
+		return;
 	}
 
 	pev->nextthink = gpGlobals->time + 0.1f;

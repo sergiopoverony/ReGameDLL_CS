@@ -2090,16 +2090,23 @@ void BombTargetFlash_Clear(CBasePlayer *pPlayer)
 	pPlayer->SetBombIcon(FALSE);
 }
 
+void Cz_RescueIcon(bool on);
+
 void RescueZoneIcon_Set(CBasePlayer *pPlayer)
 {
 	ALERT(at_aiconsole, "rescue zone icon: ON\n");
-	MESSAGE_BEGIN(MSG_ONE, gmsgStatusIcon, nullptr, pPlayer->pev);
-		WRITE_BYTE(STATUSICON_SHOW);
-		WRITE_STRING("rescue");
-		WRITE_BYTE(0);
-		WRITE_BYTE(160);
-		WRITE_BYTE(0);
-	MESSAGE_END();
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		Cz_RescueIcon(true);
+	else
+	{
+		MESSAGE_BEGIN(MSG_ONE, gmsgStatusIcon, nullptr, pPlayer->pev);
+			WRITE_BYTE(STATUSICON_SHOW);
+			WRITE_STRING("rescue");
+			WRITE_BYTE(0);
+			WRITE_BYTE(160);
+			WRITE_BYTE(0);
+		MESSAGE_END();
+	}
 
 	if (pPlayer->m_iTeam == CT && !(pPlayer->m_flDisplayHistory & DHF_IN_RESCUE_ZONE))
 	{
@@ -2110,10 +2117,15 @@ void RescueZoneIcon_Set(CBasePlayer *pPlayer)
 
 void RescueZoneIcon_Clear(CBasePlayer *pPlayer)
 {
-	MESSAGE_BEGIN(MSG_ONE, gmsgStatusIcon, nullptr, pPlayer->pev);
-		WRITE_BYTE(STATUSICON_HIDE);
-		WRITE_STRING("rescue");
-	MESSAGE_END();
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		Cz_RescueIcon(false);
+	else
+	{
+		MESSAGE_BEGIN(MSG_ONE, gmsgStatusIcon, nullptr, pPlayer->pev);
+			WRITE_BYTE(STATUSICON_HIDE);
+			WRITE_STRING("rescue");
+		MESSAGE_END();
+	}
 
 	if (pPlayer->m_iMenu >= Menu_Buy)
 	{

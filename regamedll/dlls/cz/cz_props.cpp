@@ -146,11 +146,52 @@ static std::vector<Vector> g_navNodes;
 static std::vector<std::vector<int> > g_navAdj;
 static std::string g_navMap;
 
+// one walking step like the engine does for monsters: step up (<= 18), move, step down (<= 18)
+static bool Nav_Step(const Vector &from, float x, float y, Vector &out)
+{
+	const float STEP = 18.0f;
+	const float CENTER = 36.0f; // human hull center above the floor
+
+	Vector s = from + Vector(0, 0, STEP + CENTER);
+	Vector e(x, y, s.z);
+
+	TraceResult tr;
+	UTIL_TraceHull(s, e, ignore_monsters, human_hull, nullptr, &tr);
+	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction < 1.0f)
+		return false;
+
+	Vector d = e - Vector(0, 0, STEP * 2);
+	UTIL_TraceHull(e, d, ignore_monsters, human_hull, nullptr, &tr);
+	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction >= 1.0f)
+		return false; // ledge or stuck
+
+	out = Vector(x, y, tr.vecEndPos.z - CENTER);
+	return true;
+}
+
 static bool Nav_Clear(const Vector &a, const Vector &b)
 {
-	TraceResult tr;
-	UTIL_TraceHull(a + Vector(0, 0, 56), b + Vector(0, 0, 56), ignore_monsters, human_hull, nullptr, &tr);
-	return tr.flFraction >= 1.0f && !tr.fStartSolid;
+	Vector cur = a;
+	Vector flat(b.x - a.x, b.y - a.y, 0);
+	float len = flat.Length();
+	if (len < 1.0f)
+		return true;
+
+	Vector dir = flat * (1.0f / len);
+	for (float t = 12.0f; ; t += 12.0f)
+	{
+		bool last = (t >= len);
+		float tt = last ? len : t;
+		Vector nxt;
+		if (!Nav_Step(cur, a.x + dir.x * tt, a.y + dir.y * tt, nxt))
+			return false;
+
+		cur = nxt;
+		if (last)
+			break;
+	}
+
+	return fabsf(cur.z - b.z) < 40.0f;
 }
 
 static void Nav_Load()
@@ -599,7 +640,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	{
 		if (stopDist <= 0)
 		{
-			UTIL_SetOrigin(pev, m_vMoveTarget);
+			UTIL_SetOrigin(pev, Vector(m_vMoveTarget.x, m_vMoveTarget.y, pev->origin.z));
 			pev->angles.y = m_flMoveYaw;
 			m_bArrived = true;
 			StopMove();
@@ -627,6 +668,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		else if (stopDist <= 0)
 		{
 			UTIL_SetOrigin(pev, m_vMoveTarget);
+			DROP_TO_FLOOR(ENT(pev));
 			pev->angles.y = m_flMoveYaw;
 			m_bArrived = true;
 			StopMove();
@@ -635,32 +677,23 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		return false;
 	}
 
-	// no navigation nodes here: walk straight to the target, steer around solid things
+	// walk with the engine's monster movement (stairs, ledges, collision with the real hull);
+	// if the straight direction is blocked try to steer around
 	Vector dir(flat.x / d, flat.y / d, 0);
-	Vector n = pev->origin + dir * step;
 	{
-		static const float angles[] = { 0, 35, -35, 70, -70, 100, -100 };
+		static const float angles[] = { 0, 30, -30, 60, -60, 90, -90 };
 		bool found = false;
 		float baseYaw = UTIL_VecToYaw(dir);
 
+		pev->flags |= FL_ONGROUND;
+
 		for (int i = 0; i < 7 && !found; i++)
 		{
-			Vector tdir;
-			if (angles[i] == 0)
-				tdir = dir;
-			else
+			float yaw = baseYaw + angles[i];
+			if (WALK_MOVE(ENT(pev), yaw, step, WALKMOVE_NORMAL))
 			{
-				float a = (baseYaw + angles[i]) * (M_PI / 180.0f);
-				tdir = Vector(cos(a), sin(a), 0);
-			}
-
-			Vector cand = pev->origin + tdir * (step + 4.0f);
-			TraceResult wall;
-			UTIL_TraceHull(pev->origin + Vector(0, 0, 56), cand + Vector(0, 0, 56), ignore_monsters, human_hull, ENT(pev), &wall);
-			if (wall.flFraction >= 1.0f && !wall.fStartSolid)
-			{
-				dir = tdir;
-				n = pev->origin + tdir * step;
+				float a = yaw * (M_PI / 180.0f);
+				dir = Vector(cos(a), sin(a), 0);
 				found = true;
 			}
 		}
@@ -668,11 +701,13 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		if (!found)
 		{
 			// boxed in: if this lasts, give up following / jump to the mark
+			pev->velocity = Vector(0, 0, 1);
 			if (m_flStuckSince == 0.0f)
 				m_flStuckSince = gpGlobals->time;
 			else if (gpGlobals->time - m_flStuckSince > 2.5f && stopDist <= 0)
 			{
 				UTIL_SetOrigin(pev, m_vMoveTarget);
+				DROP_TO_FLOOR(ENT(pev));
 				pev->angles.y = m_flMoveYaw;
 				m_flStuckSince = 0;
 				m_bArrived = true;
@@ -685,17 +720,9 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		m_flStuckSince = 0.0f;
 	}
 
-	// stay on the floor (stairs, ramps): the marks only give the final height
-	TraceResult tr;
-	UTIL_TraceLine(n + Vector(0, 0, 40), n + Vector(0, 0, -60), ignore_monsters, ENT(pev), &tr);
-	if (tr.flFraction < 1.0f && !tr.fStartSolid)
-		n.z = tr.vecEndPos.z + m_flSitApplied;
-	else
-		n.z = pev->origin.z + to.z * (step / d);
-
 	pev->flags |= FL_ONGROUND;
 	pev->velocity = Vector(dir.x * m_flGroundSpeed, dir.y * m_flGroundSpeed, 0);
-	UTIL_SetOrigin(pev, n);
+	UTIL_SetOrigin(pev, pev->origin); // relink
 	return false;
 }
 
