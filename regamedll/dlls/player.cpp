@@ -2092,6 +2092,7 @@ void BombTargetFlash_Clear(CBasePlayer *pPlayer)
 
 void RescueZoneIcon_Set(CBasePlayer *pPlayer)
 {
+	ALERT(at_aiconsole, "rescue zone icon: ON\n");
 	MESSAGE_BEGIN(MSG_ONE, gmsgStatusIcon, nullptr, pPlayer->pev);
 		WRITE_BYTE(STATUSICON_SHOW);
 		WRITE_STRING("rescue");
@@ -8901,6 +8902,7 @@ void CStripWeapons::KeyValue(KeyValueData *pkvd)
 
 void CStripWeapons::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
+	ALERT(at_aiconsole, "player_weaponstrip '%s' used\n", STRING(pev->targetname));
 	CBasePlayer *pPlayer = nullptr;
 	if (pActivator && pActivator->IsPlayer())
 	{

@@ -250,8 +250,10 @@ public:
 
 public:
 	void PlayTrack(edict_t *pEdict);
+	void EXPORT DoorWatch(); // CZ:DS: music stops when the player walks through the door that shares our targetname
 
 	string_t m_iszTrackName;
+	EHANDLE m_hWatchDoor;
 };
 
 // This plays a CD track when fired or when the player enters it's radius

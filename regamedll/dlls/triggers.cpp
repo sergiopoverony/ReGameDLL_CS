@@ -607,6 +607,42 @@ void CTriggerCDAudio::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYP
 	}
 
 	PlayTrack(pEdict);
+
+	if (!FStringNull(m_iszTrackName) && !FStringNull(pev->targetname))
+	{
+		CBaseEntity *pDoor = nullptr;
+		while ((pDoor = UTIL_FindEntityByTargetname(pDoor, STRING(pev->targetname))) != nullptr)
+		{
+			if (FClassnameIs(pDoor->pev, "func_door") || FClassnameIs(pDoor->pev, "func_door_rotating"))
+			{
+				m_hWatchDoor = pDoor;
+				SetThink(&CTriggerCDAudio::DoorWatch);
+				pev->nextthink = gpGlobals->time + 2.0f;
+				break;
+			}
+		}
+	}
+}
+
+void CTriggerCDAudio::DoorWatch()
+{
+	CBaseEntity *pDoor = m_hWatchDoor;
+	CBaseEntity *pPlayer = UTIL_PlayerByIndex(1);
+
+	if (!pDoor || !pPlayer)
+		return;
+
+	const float m = 48.0f;
+	const Vector &o = pPlayer->pev->origin;
+	if (o.x > pDoor->pev->absmin.x - m && o.x < pDoor->pev->absmax.x + m
+	 && o.y > pDoor->pev->absmin.y - m && o.y < pDoor->pev->absmax.y + m
+	 && o.z > pDoor->pev->absmin.z - 80 && o.z < pDoor->pev->absmax.z + 80)
+	{
+		CLIENT_COMMAND(pPlayer->edict(), "mp3 stop\n");
+		return;
+	}
+
+	pev->nextthink = gpGlobals->time + 0.2f;
 }
 
 const char *g_szMP3trackFileMap[] =

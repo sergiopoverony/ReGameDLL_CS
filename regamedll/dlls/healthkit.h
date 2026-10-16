@@ -51,7 +51,7 @@ public:
 	virtual void Restart();
 #endif
 
-	virtual int ObjectCaps() { return (CBaseToggle::ObjectCaps() | (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) ? FCAP_CONTINUOUS_USE : 0)) & ~FCAP_ACROSS_TRANSITION; }
+	virtual int ObjectCaps() { return (CBaseToggle::ObjectCaps() | (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) ? FCAP_CONTINUOUS_USE : FCAP_IMPULSE_USE)) & ~FCAP_ACROSS_TRANSITION; }
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
 
 public:

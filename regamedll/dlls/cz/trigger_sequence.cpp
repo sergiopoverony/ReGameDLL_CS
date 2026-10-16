@@ -402,6 +402,8 @@ void CTriggerSequence::ExecuteText(const czseq::Command &cmd)
 	UTIL_HudMessageAll(p, msg);
 }
 
+void Cz_NpcSpeak(CBaseEntity *pSpeaker, float seconds);
+
 void CTriggerSequence::ExecuteSound(const czseq::Command &cmd)
 {
 	std::string path;
@@ -413,7 +415,10 @@ void CTriggerSequence::ExecuteSound(const czseq::Command &cmd)
 		pSpeaker = UTIL_FindEntityByTargetname(nullptr, cmd.mod.speaker.c_str());
 
 	if (pSpeaker)
+	{
+		Cz_NpcSpeak(pSpeaker, 4.0f);
 		EMIT_SOUND_DYN2(ENT(pSpeaker->pev), CHAN_VOICE, path.c_str(), VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+	}
 	else
 		EMIT_SOUND_DYN2(ENT(pev), CHAN_VOICE, path.c_str(), VOL_NORM, ATTN_NONE, 0, PITCH_NORM);
 }

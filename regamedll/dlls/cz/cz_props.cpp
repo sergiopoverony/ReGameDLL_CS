@@ -149,7 +149,7 @@ static std::string g_navMap;
 static bool Nav_Clear(const Vector &a, const Vector &b)
 {
 	TraceResult tr;
-	UTIL_TraceHull(a + Vector(0, 0, 50), b + Vector(0, 0, 50), ignore_monsters, human_hull, nullptr, &tr);
+	UTIL_TraceHull(a + Vector(0, 0, 56), b + Vector(0, 0, 56), ignore_monsters, human_hull, nullptr, &tr);
 	return tr.flFraction >= 1.0f && !tr.fStartSolid;
 }
 
@@ -313,6 +313,8 @@ public:
 	float m_flLastMove;
 	float m_flStuckSince;
 	float m_flProgDist = 0, m_flProgTime = 0;
+	float m_flFaceUntil = 0, m_flBaseYaw = 0;
+	bool m_bBaseYawSet = false;
 	bool m_bReplanned = false;
 	Vector m_path[16]; // waypoints (info_node path); the last one is the goal
 	int m_nPath;
@@ -498,9 +500,38 @@ void CMonsterNPC::AnimThink()
 	if (m_bSitting && !m_bMoving)
 		ApplySitOffset();
 
+	// speaking NPC turns to the player, then returns to the placed angle
+	bool turning = false;
+	if (!m_bMoving && !m_bFollow)
+	{
+		if (!m_bBaseYawSet)
+		{
+			m_flBaseYaw = pev->angles.y;
+			m_bBaseYawSet = true;
+		}
+
+		float want = m_flBaseYaw;
+		if (gpGlobals->time < m_flFaceUntil)
+		{
+			CBaseEntity *pl = UTIL_PlayerByIndex(1);
+			if (pl)
+			{
+				Vector d = pl->pev->origin - pev->origin;
+				want = UTIL_VecToYaw(Vector(d.x, d.y, 0));
+			}
+		}
+
+		float cur = pev->angles.y;
+		if (fabs(UTIL_AngleDiff(want, cur)) > 1.0f)
+		{
+			pev->angles.y = UTIL_ApproachAngle(want, cur, 220.0f * 0.03f);
+			turning = true;
+		}
+	}
+
 	// while walking think every frame and keep velocity non-zero: that switches the engine's
 	// 10 Hz studio "slerp" off and the client interpolates the origin normally
-	pev->nextthink = gpGlobals->time + ((m_bMoving || m_bFollow) ? 0.0f : 0.1f);
+	pev->nextthink = gpGlobals->time + ((m_bMoving || m_bFollow) ? 0.0f : (turning ? 0.03f : 0.1f));
 }
 
 void CMonsterNPC::BuildPath(const Vector &goal)
@@ -626,7 +657,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 
 			Vector cand = pev->origin + tdir * (step + 4.0f);
 			TraceResult wall;
-			UTIL_TraceHull(pev->origin + Vector(0, 0, 50), cand + Vector(0, 0, 50), ignore_monsters, human_hull, ENT(pev), &wall);
+			UTIL_TraceHull(pev->origin + Vector(0, 0, 56), cand + Vector(0, 0, 56), ignore_monsters, human_hull, ENT(pev), &wall);
 			if (wall.flFraction >= 1.0f && !wall.fStartSolid)
 			{
 				dir = tdir;
@@ -1019,4 +1050,21 @@ void CCZScriptedSequence::Finish()
 	}
 
 	SUB_UseTargets(this, USE_TOGGLE, 0);
+}
+
+
+// called by trigger_sequence when an entity speaks: make a stationary NPC look at the player
+void Cz_NpcSpeak(CBaseEntity *pSpeaker, float seconds)
+{
+	if (!pSpeaker)
+		return;
+
+	const char *cls = STRING(pSpeaker->pev->classname);
+	if (Q_strcmp(cls, "monster_npc") && Q_strcmp(cls, "monster_generic"))
+		return;
+
+	CMonsterNPC *pNpc = (CMonsterNPC *)pSpeaker;
+	pNpc->m_flFaceUntil = gpGlobals->time + seconds;
+	if (pNpc->pev->nextthink <= 0 || pNpc->pev->nextthink > gpGlobals->time + 0.05f)
+		pNpc->pev->nextthink = gpGlobals->time + 0.03f;
 }

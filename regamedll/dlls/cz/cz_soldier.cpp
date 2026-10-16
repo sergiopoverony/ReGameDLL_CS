@@ -301,6 +301,10 @@ void CCZMonsterMaker::Spawn()
 	SetThink(&CCZMonsterMaker::MakerThink);
 	SetUse(&CCZMonsterMaker::Use);
 
+	// models can only be precached while the map loads: do it now for the monster we will create later
+	if (!FStringNull(m_iszMonsterType))
+		UTIL_PrecacheOther(STRING(m_iszMonsterType));
+
 	// CZ: maker with no trigger starts on its own (nobody targets spawn_CT in train02)
 	if (!FStringNull(m_iszMonsterType))
 		pev->nextthink = gpGlobals->time + 0.5f;
