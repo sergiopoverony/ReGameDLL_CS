@@ -705,6 +705,43 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		return true;
 	}
 
+	if (m_flYawBias > 0.0f)
+	{
+		// red-shirt worker: follows his path through props (no collision of his own), but stays solid for the player
+		float a = (UTIL_VecToYaw(flat) + m_flBiasCur) * (M_PI / 180.0f);
+		Vector dir2(cos(a), sin(a), 0);
+		Vector np = pev->origin + dir2 * step;
+
+		CBaseEntity *pl = UTIL_FindEntityByClassname(nullptr, "player");
+		if (pl && pl->IsAlive())
+		{
+			Vector dp = pl->pev->origin - np;
+			dp.z = 0;
+			if (dp.Length() < 34.0f && fabs(pl->pev->origin.z - np.z) < 72.0f)
+			{
+				pev->velocity = Vector(0, 0, 1); // wait for the player to step aside
+				return false;
+			}
+		}
+
+		// keep the same height above the floor as now, following the floor under the new spot
+		TraceResult f0, f1;
+		UTIL_TraceLine(pev->origin + Vector(0, 0, 8), pev->origin - Vector(0, 0, 80), ignore_monsters, ENT(pev), &f0);
+		UTIL_TraceLine(Vector(np.x, np.y, pev->origin.z + 8), Vector(np.x, np.y, pev->origin.z - 80), ignore_monsters, ENT(pev), &f1);
+		np.z = pev->origin.z;
+		if (f0.flFraction < 1.0f && f1.flFraction < 1.0f && !f1.fStartSolid)
+		{
+			float dz = f1.vecEndPos.z - f0.vecEndPos.z;
+			if (dz > -24.0f && dz < 24.0f)
+				np.z += dz;
+		}
+
+		pev->flags |= FL_ONGROUND;
+		pev->velocity = Vector(dir2.x * m_flGroundSpeed, dir2.y * m_flGroundSpeed, 0);
+		UTIL_SetOrigin(pev, np);
+		return false;
+	}
+
 	// progress watchdog: no real approach to the current goal for 1.2 s -> replan, then skip ahead
 	if (m_flProgTime == 0.0f || d < m_flProgDist - 30.0f)
 	{
