@@ -392,6 +392,8 @@ public:
 	float m_flMoveYaw;
 	float m_flBiasD0 = 0;
 	float m_flBiasCur = 0;
+	int m_nWalks = 0;
+	bool m_bGhost = false; // red-shirt worker: no collision of his own while walking
 	float m_flYawBias = 0; // original quirk: a scripted walk starts ~35 deg to the left of the goal and straightens out
 	float m_flLastMove;
 	float m_flStuckSince;
@@ -705,7 +707,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		return true;
 	}
 
-	if (m_flYawBias > 0.0f)
+	if (m_bGhost)
 	{
 		// red-shirt worker: follows his path through props (no collision of his own), but stays solid for the player
 		float a = (UTIL_VecToYaw(flat) + m_flBiasCur) * (M_PI / 180.0f);
@@ -724,15 +726,15 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 			}
 		}
 
-		// keep the same height above the floor as now, following the floor under the new spot
+		// keep the same height above the floor as now, following the floor (steps included) under the new spot
 		TraceResult f0, f1;
-		UTIL_TraceLine(pev->origin + Vector(0, 0, 8), pev->origin - Vector(0, 0, 80), ignore_monsters, ENT(pev), &f0);
-		UTIL_TraceLine(Vector(np.x, np.y, pev->origin.z + 8), Vector(np.x, np.y, pev->origin.z - 80), ignore_monsters, ENT(pev), &f1);
+		UTIL_TraceLine(pev->origin + Vector(0, 0, 40), pev->origin - Vector(0, 0, 100), ignore_monsters, ENT(pev), &f0);
+		UTIL_TraceLine(Vector(np.x, np.y, pev->origin.z + 40), Vector(np.x, np.y, pev->origin.z - 100), ignore_monsters, ENT(pev), &f1);
 		np.z = pev->origin.z;
-		if (f0.flFraction < 1.0f && f1.flFraction < 1.0f && !f1.fStartSolid)
+		if (f0.flFraction < 1.0f && f1.flFraction < 1.0f && !f1.fStartSolid && !f0.fStartSolid)
 		{
 			float dz = f1.vecEndPos.z - f0.vecEndPos.z;
-			if (dz > -24.0f && dz < 24.0f)
+			if (dz > -40.0f && dz < 40.0f)
 				np.z += dz;
 		}
 
@@ -1091,7 +1093,9 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
 		// original quirk belongs to the red-shirt worker only
-		npc->m_flYawBias = FStrEq(STRING(npc->pev->targetname), "worker_walk1") ? 38.0f : 0.0f;
+		npc->m_flYawBias = (npc->m_nWalks > 0 && FStrEq(STRING(npc->pev->targetname), "worker_walk1")) ? 38.0f : 0.0f; // the very first walk is straight
+		npc->m_nWalks++;
+		npc->m_bGhost = FStrEq(STRING(npc->pev->targetname), "worker_walk1");
 		npc->m_flBiasD0 = 0.0f;
 
 		m_state = 1;

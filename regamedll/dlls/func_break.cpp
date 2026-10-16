@@ -177,6 +177,14 @@ void CBreakable::Restart()
 
 void CBreakable::KeyValue(KeyValueData *pkvd)
 {
+	// CZ:DS: only this weapon can damage the object (1 = blowtorch, 2 = radio controlled bomb)
+	if (FStrEq(pkvd->szKeyName, "onlydamagedby"))
+	{
+		pev->iuser4 = Q_strstr(pkvd->szValue, "blowtorch") ? 1 : (Q_strstr(pkvd->szValue, "radiocontrolled") ? 2 : 3);
+		pkvd->fHandled = TRUE;
+		return;
+	}
+
 	// UNDONE_WC: explicitly ignoring these fields, but they shouldn't be in the map file!
 	if (FStrEq(pkvd->szKeyName, "explosion"))
 	{

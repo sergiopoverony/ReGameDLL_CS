@@ -6,6 +6,9 @@
 //   0 mp5, 1 shotgun, 2 law, 3 scout, 4 m4a1, 5 usp, 6 m60, 7 mac-10, 8 blank; skin 3 = SWAT uniform.
 
 bool g_czMakerSpawn = false; // set by monstermaker while it creates a monster
+static cvar_t cz_cage_drop = { "cz_cage_drop", "36", 0, 36.0f, nullptr };
+static bool g_czCageCvar = false;
+
 
 class CCZSoldier: public CBaseAnimating
 {
@@ -254,6 +257,15 @@ void CCZSoldier::Spawn()
 	m_hPlat = nullptr;
 	m_bPlatMoved = false;
 	m_bMade = g_czMakerSpawn;
+	if (m_bMade)
+	{
+		pev->solid = SOLID_NOT; // the caged soldier is not solid
+		if (!g_czCageCvar)
+		{
+			g_czCageCvar = true;
+			CVAR_REGISTER(&cz_cage_drop);
+		}
+	}
 	Settle();
 
 	InitBoneControllers();
@@ -492,51 +504,19 @@ void CCZSoldier::AnimThink()
 	if (plat)
 	{
 		Vector want = plat->pev->origin + m_platOfs;
+		if (m_bMade)
+			want.z -= cz_cage_drop.value; // tweakable live: the spot the mapper chose is above the cage floor
 		if ((want - pev->origin).Length() > 0.1f)
 			UTIL_SetOrigin(pev, want);
 
-		if (m_bMade)
+		if (!m_bMade)
 		{
 			if (plat->pev->velocity.Length() > 1.0f)
-			{
 				m_bPlatMoved = true;
-				m_flSettleAt = 0;
-			}
-			else if (m_bPlatMoved || m_flSettleAt == 0)
+			else if (m_bPlatMoved)
 			{
-				// the cage stopped (or we just appeared): wait a moment, then stand on its floor
-				if (m_flSettleAt == 0)
-					m_flSettleAt = gpGlobals->time + 0.4f;
-				else if (gpGlobals->time >= m_flSettleAt)
-				{
-					m_bPlatMoved = false;
-					m_flSettleAt = -1;
-					StandOnFloor();
-				}
-			}
-		}
-		else if (plat->pev->velocity.Length() > 1.0f)
-			m_bPlatMoved = true;
-		else if (m_bPlatMoved)
-		{
-			m_bPlatMoved = false;
-			Settle(); // the lift has stopped: stand firmly on its floor
-		}
-
-		if (m_bMade && m_flSettleAt < 0)
-		{
-			// settled on the cage: never hang in the air if the floor goes away or the shutters move
-			TraceResult ft;
-			Cz_TraceFloor(pev->origin + Vector(0, 0, 8), 400.0f, ENT(pev), ft);
-			if (!ft.fStartSolid && ft.flFraction < 1.0f)
-			{
-				float gap = pev->origin.z - ft.vecEndPos.z;
-				if (gap > 0.5f)
-				{
-					pev->origin.z -= (gap < 12.0f ? gap : 12.0f);
-					UTIL_SetOrigin(pev, pev->origin);
-					m_platOfs = pev->origin - plat->pev->origin;
-				}
+				m_bPlatMoved = false;
+				Settle(); // the lift has stopped: stand firmly on its floor
 			}
 		}
 

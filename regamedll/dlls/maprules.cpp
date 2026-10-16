@@ -571,6 +571,8 @@ void CGamePlayerEquip::Touch(CBaseEntity *pOther)
 	}
 }
 
+bool Cz_GiveTool(CBasePlayer *pl, const char *name);
+
 void CGamePlayerEquip::EquipPlayer(CBaseEntity *pEntity)
 {
 	if (!pEntity || !pEntity->IsPlayer())
@@ -595,6 +597,9 @@ void CGamePlayerEquip::EquipPlayer(CBaseEntity *pEntity)
 #endif
 
 		ALERT(at_aiconsole, "game_player_equip '%s': give %s x%d\n", STRING(pev->targetname), STRING(m_weaponNames[i]), m_weaponCount[i]);
+
+		if (Cz_GiveTool(pPlayer, STRING(m_weaponNames[i])))
+			continue;
 
 		for (int j = 0; j < m_weaponCount[i]; j++)
 		{

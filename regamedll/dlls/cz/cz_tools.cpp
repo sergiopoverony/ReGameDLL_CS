@@ -106,7 +106,7 @@ static bool Cz_Overlaps(CBaseEntity *a, CBaseEntity *b)
 // ---------------------------------------------------------------------------
 static cvar_t cz_torch_fwd   = { "cz_torch_fwd",   "24", 0, 24.0f, nullptr };
 static cvar_t cz_torch_right = { "cz_torch_right", "7",  0, 7.0f,  nullptr };
-static cvar_t cz_torch_up    = { "cz_torch_up",    "-6", 0, -6.0f, nullptr };
+static cvar_t cz_torch_up    = { "cz_torch_up",    "3", 0, 3.0f, nullptr };
 static cvar_t cz_torch_scale = { "cz_torch_scale", "0.25", 0, 0.25f, nullptr };
 static bool g_czTorchCvars = false;
 
@@ -276,6 +276,128 @@ void CCZTorchFx::FxThink()
 		m_nextSound = gpGlobals->time + 0.35f;
 		EMIT_SOUND(pl->edict(), CHAN_WEAPON, (RANDOM_LONG(0, 1) ? "buttons/spark5.wav" : "buttons/spark6.wav"), 0.6f, ATTN_NORM);
 	}
+}
+
+// ---------------------------------------------------------------------------
+// radio controlled bomb: planted in a marked zone with the left button, detonated with the next press
+// ---------------------------------------------------------------------------
+static EHANDLE g_hRcPlanted;
+static float g_flRcPlantTime = 0;
+
+class CCZRcPlanted: public CBaseAnimating
+{
+public:
+	virtual void Spawn()
+	{
+		SET_MODEL(ENT(pev), "models/w_rcontrolbomb_bomb.mdl");
+		pev->movetype = MOVETYPE_NONE;
+		pev->solid = SOLID_NOT;
+		UTIL_SetOrigin(pev, pev->origin);
+	}
+	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
+};
+LINK_ENTITY_TO_CLASS(cz_rc_planted, CCZRcPlanted, CCSRcPlanted)
+
+class CCZRcCtl: public CBaseEntity
+{
+public:
+	virtual void Spawn()
+	{
+		pev->solid = SOLID_NOT;
+		pev->movetype = MOVETYPE_NONE;
+		pev->effects = EF_NODRAW;
+		m_prev = true;
+		SetThink(&CCZRcCtl::CtlThink);
+		pev->nextthink = gpGlobals->time + 0.05f;
+	}
+	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
+	void EXPORT CtlThink();
+	bool m_prev;
+};
+LINK_ENTITY_TO_CLASS(cz_rc_ctl, CCZRcCtl, CCSRcCtl)
+
+void CCZRcCtl::CtlThink()
+{
+	pev->nextthink = gpGlobals->time + 0.02f;
+
+	CBasePlayer *pl = Cz_Player();
+	if (!pl || !(g_czTools & CZ_ICON_RCBOMB))
+	{
+		UTIL_Remove(this);
+		return;
+	}
+
+	bool atk = (pl->pev->button & IN_ATTACK) != 0;
+	bool edge = atk && !m_prev;
+	m_prev = atk;
+
+	CBaseEntity *bomb = g_hRcPlanted;
+	if (!edge || !bomb || gpGlobals->time < g_flRcPlantTime + 0.5f)
+		return;
+
+	// boom
+	Vector pos = bomb->pev->origin;
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pos);
+		WRITE_BYTE(TE_EXPLOSION);
+		WRITE_COORD(pos.x);
+		WRITE_COORD(pos.y);
+		WRITE_COORD(pos.z);
+		WRITE_SHORT(g_sModelIndexFireball);
+		WRITE_BYTE(25);
+		WRITE_BYTE(15);
+		WRITE_BYTE(0);
+	MESSAGE_END();
+	EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
+	ALERT(at_aiconsole, "rc bomb detonated at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
+
+	CBaseEntity *brk = nullptr;
+	while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
+	{
+		if (brk->pev->iuser4 == 2 && brk->pev->takedamage != DAMAGE_NO)
+		{
+			ALERT(at_aiconsole, "rc bomb: breaking '%s'\n", STRING(brk->pev->targetname));
+			brk->Use(pl, pl, USE_TOGGLE, 0);
+		}
+	}
+
+	UTIL_Remove(bomb);
+	g_hRcPlanted = nullptr;
+	g_czTools &= ~CZ_ICON_RCBOMB;
+	pl->pev->viewmodel = 0;
+	Cz_SendIcons(true);
+}
+
+// the bomb tool goes into the hands; everything else is taken away
+bool Cz_GiveTool(CBasePlayer *pl, const char *name)
+{
+	if (!name || Q_strcmp(name, "weapon_radiocontrolledbomb"))
+		return false;
+
+	Cz_ToolsNewMap();
+	pl->RemoveAllItems(FALSE);
+	g_czTools = CZ_ICON_RCBOMB;
+	g_hRcPlanted = nullptr;
+
+	{
+		int len = 0;
+		byte *f = LOAD_FILE_FOR_ME("models/v_rcontrolbomb.mdl", &len);
+		if (f)
+		{
+			FREE_FILE(f);
+			pl->pev->viewmodel = MAKE_STRING("models/v_rcontrolbomb.mdl");
+			pl->pev->weaponanim = 0;
+		}
+		else
+			ALERT(at_console, "tool: models/v_rcontrolbomb.mdl not found\n");
+	}
+
+	if (!UTIL_FindEntityByClassname(nullptr, "cz_rc_ctl"))
+		CBaseEntity::Create("cz_rc_ctl", pl->pev->origin, g_vecZero, nullptr);
+
+	EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
+	ALERT(at_aiconsole, "tool given: weapon_radiocontrolledbomb\n");
+	Cz_SendIcons(true);
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +634,8 @@ public:
 	bool m_inside;
 	bool m_done;
 	bool m_stealth;
+	bool m_rcMode;
+	bool m_prevAtk;
 	int m_showIcon;
 };
 
@@ -567,6 +691,7 @@ void CCZUseTool::Spawn()
 	m_need = 0;
 	m_iconBits = 0;
 	m_holdTime = 0;
+	m_rcMode = false;
 
 	if (m_stealth)
 	{
@@ -592,6 +717,18 @@ void CCZUseTool::Spawn()
 			m_holdTime = m_defuseTime > 0 ? m_defuseTime : 5.0f;
 		}
 
+		m_rcMode = ((m_toolSet & CZ_ICON_RCBOMB) || !FStringNull(m_rcBombTarget));
+		m_prevAtk = true;
+		if (m_rcMode)
+		{
+			m_need = CZ_ICON_RCBOMB;
+			m_holdTime = 0;
+			PRECACHE_MODEL("models/w_rcontrolbomb_bomb.mdl");
+			PRECACHE_MODEL("models/v_rcontrolbomb.mdl");
+			PRECACHE_SOUND("weapons/c4_explode1.wav");
+			PRECACHE_SOUND("items/gunpickup2.wav");
+		}
+
 		m_iconBits |= m_need | (m_toolSet & 0xFFFF);
 	}
 
@@ -613,6 +750,25 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 			if (pBomb != this)
 				UTIL_Remove(pBomb);
 		}
+	}
+
+	if (m_rcMode)
+	{
+		Vector pos = pl->pev->origin;
+		Vector ang = g_vecZero;
+		CBaseEntity *guide = FStringNull(m_rcBombTarget) ? nullptr : UTIL_FindEntityByTargetname(nullptr, STRING(m_rcBombTarget));
+		if (guide)
+		{
+			pos = guide->pev->origin;
+			ang = guide->pev->angles;
+		}
+		CBaseEntity *old = g_hRcPlanted;
+		if (old)
+			UTIL_Remove(old);
+		g_hRcPlanted = CBaseEntity::Create("cz_rc_planted", pos, ang, nullptr);
+		g_flRcPlantTime = gpGlobals->time;
+		EMIT_SOUND(ENT(pl->pev), CHAN_WEAPON, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
+		ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
 	}
 
 	if (!FStringNull(m_rcBombTarget))
@@ -667,6 +823,10 @@ void CCZUseTool::ToolThink()
 	CBasePlayer *pl = Cz_Player();
 	bool inside = pl && pl->IsAlive() && !m_done && Cz_Overlaps(this, pl);
 
+	bool atkNow = pl && (pl->pev->button & IN_ATTACK) != 0;
+	bool atkEdge = atkNow && !m_prevAtk;
+	m_prevAtk = atkNow;
+
 	if (inside != m_inside)
 	{
 		m_inside = inside;
@@ -688,6 +848,17 @@ void CCZUseTool::ToolThink()
 
 	if (gpGlobals->time < m_nextUse)
 		return;
+
+	if (m_rcMode)
+	{
+		// plant with the left button (one press), only inside the marked zone
+		if (atkEdge)
+		{
+			m_nextUse = gpGlobals->time + 1.0f;
+			Complete(pl);
+		}
+		return;
+	}
 
 	// the blowtorch is used like a weapon: hold fire while touching the lock
 	bool use = (pl->pev->button & ((m_need == CZ_ICON_TORCH) ? IN_ATTACK : IN_USE)) != 0;
