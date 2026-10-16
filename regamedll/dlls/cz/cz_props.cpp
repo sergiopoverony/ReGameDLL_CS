@@ -380,6 +380,8 @@ public:
 
 	string_t m_idleAnim;
 	string_t m_useTarget;
+	string_t m_deathAnim;
+	bool m_bDead = false;
 	int m_head;
 	int m_spawned;
 	bool m_bScripted; // driven by scripted_sequence
@@ -416,6 +418,8 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 {
 	DEFINE_FIELD(CMonsterNPC, m_idleAnim, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_useTarget, FIELD_STRING),
+	DEFINE_FIELD(CMonsterNPC, m_deathAnim, FIELD_STRING),
+	DEFINE_FIELD(CMonsterNPC, m_bDead, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_head, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_spawned, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_bScripted, FIELD_CHARACTER),
@@ -467,6 +471,11 @@ void CMonsterNPC::KeyValue(KeyValueData *pkvd)
 		m_useTarget = ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if (FStrEq(pkvd->szKeyName, "deathanim"))
+	{
+		m_deathAnim = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
 	else if (FStrEq(pkvd->szKeyName, "head"))
 	{
 		m_head = Q_atoi(pkvd->szValue);
@@ -474,6 +483,28 @@ void CMonsterNPC::KeyValue(KeyValueData *pkvd)
 	}
 	else
 		CBaseAnimating::KeyValue(pkvd);
+}
+
+// trigger_killtarget on a model with a death animation: play it and stay (damaged machinery, debris ...)
+bool Cz_KillGeneric(CBaseEntity *pEnt)
+{
+	if (!pEnt || !FClassnameIs(pEnt->pev, "monster_generic"))
+		return false;
+	CMonsterNPC *m = (CMonsterNPC *)pEnt;
+	if (FStringNull(m->m_deathAnim))
+		return false;
+	int seq = m->LookupSequence(STRING(m->m_deathAnim));
+	if (seq < 0)
+		return false;
+	m->m_bDead = true;
+	m->m_bScripted = false;
+	m->m_bMoving = false;
+	m->pev->sequence = seq;
+	m->pev->frame = 0;
+	m->ResetSequenceInfo();
+	m->pev->solid = SOLID_NOT;
+	ALERT(at_aiconsole, "monster_generic '%s': death anim '%s'\n", STRING(m->pev->targetname), STRING(m->m_deathAnim));
+	return true;
 }
 
 void CMonsterNPC::ApplyIdle(const char *name)
@@ -603,7 +634,7 @@ void CMonsterNPC::AnimThink()
 		FollowStep();
 
 	// animations that are not flagged as looping stop at the last frame: restart them
-	if (m_fSequenceFinished && !m_fSequenceLoops && !m_bScripted)
+	if (m_fSequenceFinished && !m_fSequenceLoops && !m_bScripted && !m_bDead)
 	{
 		pev->frame = 0;
 		ResetSequenceInfo();
@@ -1146,7 +1177,7 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 				{ "worker_sequence1", 0, {} },
 				{ "worker_sequence2", 1, { { -250, -154 } } },
 				{ "worker_sequence4", 2, { { -105, -200 }, { 34, -91 } } },
-				{ "worker_sequence3", 2, { { 69, -58 }, { -183, -50 } } },
+				{ "worker_sequence3", 3, { { 140, -70 }, { 0, -105 }, { -130, -75 } } }, // wide arc to the right (user sketch)
 				{ "worker_sequence5", 2, { { -220, -41 }, { -452, -174 } } },
 			};
 			for (const leg_t &l : legs)

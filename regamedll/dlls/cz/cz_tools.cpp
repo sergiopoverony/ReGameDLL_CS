@@ -25,6 +25,14 @@ static int g_czZoneCnt[16];     // how many zones of every icon the player is in
 static int g_czLastA = -1, g_czLastC = -1;
 static char g_czLastMap[64];
 
+static int  g_rcCharges = 5;     // radio controlled mines left
+static int  g_rcHold = 0;        // 0 = mine in hands, 1 = detonator
+static bool g_fiberOn = false;   // looking through a fiber optic camera
+static float g_fiberExitT = -10;
+struct czq_t { int anim; float t; };
+static czq_t g_tQ[2];            // delayed viewmodel animations
+static float g_czToolSent = -1;
+
 static void Cz_ToolsNewMap()
 {
 	if (Q_strcmp(g_czLastMap, STRING(gpGlobals->mapname)))
@@ -32,6 +40,9 @@ static void Cz_ToolsNewMap()
 		Q_strncpy(g_czLastMap, STRING(gpGlobals->mapname), sizeof(g_czLastMap) - 1);
 		g_czLastMap[sizeof(g_czLastMap) - 1] = '\0';
 		g_czTools = 0;
+		g_rcCharges = 5;
+		g_rcHold = 0;
+		g_fiberOn = false;
 		Q_memset(g_czZoneCnt, 0, sizeof(g_czZoneCnt));
 		g_czLastA = g_czLastC = -1;
 	}
@@ -46,6 +57,44 @@ static CBasePlayer *Cz_Player()
 }
 
 static void Cz_EnsureStateFwd();
+
+static void Cz_QueueAnim(int slot, int anim, float delay)
+{
+	g_tQ[slot].anim = anim;
+	g_tQ[slot].t = gpGlobals->time + delay;
+}
+
+static void Cz_RunQueue(CBasePlayer *pl)
+{
+	for (int i = 0; i < 2; i++)
+	{
+		if (g_tQ[i].t && gpGlobals->time >= g_tQ[i].t)
+		{
+			g_tQ[i].t = 0;
+			if (pl)
+				pl->pev->weaponanim = g_tQ[i].anim;
+		}
+	}
+}
+
+// "CzTool": BYTE current tool (0 none, 1 camera, 2 fiber, 3 torch, 4 mines), BYTE mines left, BYTE 1 = detonator in hands
+static void Cz_SendTool()
+{
+	CBasePlayer *pl = Cz_Player();
+	if (!pl)
+		return;
+	int tool = 0;
+	if (g_czTools & CZ_ICON_RCBOMB) tool = 4;
+	else if (g_czTools & CZ_ICON_TORCH) tool = 3;
+	else if (g_czTools & CZ_ICON_FIBER) tool = 2;
+	else if (g_czTools & CZ_ICON_CAMERA) tool = 1;
+	MESSAGE_BEGIN(MSG_ONE, gmsgCzTool, nullptr, pl->pev);
+		WRITE_BYTE(tool);
+		WRITE_BYTE(g_rcCharges);
+		WRITE_BYTE(g_rcHold);
+	MESSAGE_END();
+}
+
 static void Cz_SendIcons(bool force = false)
 {
 	CBasePlayer *pl = Cz_Player();
@@ -252,6 +301,9 @@ void CCZTorchFx::FxThink()
 	{
 		m_wasAttack = true;
 		pl->pev->weaponanim = 1;
+		CBaseEntity *l0 = Cz_AimedLock(pl);
+		if (l0)
+			EMIT_SOUND(l0->edict(), CHAN_WEAPON, "weapons/blowtorch-1.wav", VOL_NORM, ATTN_NORM);
 	}
 
 	// sparks and light come from the lock, and only when the torch touches it
@@ -286,11 +338,6 @@ void CCZTorchFx::FxThink()
 		MESSAGE_END();
 	}
 
-	if (gpGlobals->time >= m_nextSound)
-	{
-		m_nextSound = gpGlobals->time + 0.35f;
-		EMIT_SOUND(pl->edict(), CHAN_WEAPON, (RANDOM_LONG(0, 1) ? "buttons/spark5.wav" : "buttons/spark6.wav"), 0.6f, ATTN_NORM);
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -328,8 +375,10 @@ public:
 	virtual void Precache()
 	{
 		// called after a save game was loaded: the globals take the saved values over
-		g_czTools = m_tools;
-		g_rcState = m_rcState;
+			g_czTools = m_tools;
+			g_rcCharges = m_charges;
+			g_rcHold = m_hold;
+			g_rcState = m_rcState;
 		g_rcDue = m_rcDue;
 		g_rcStep2 = m_rcStep2;
 		g_rcPos = m_rcPos;
@@ -344,9 +393,10 @@ public:
 	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 	void EXPORT StateThink()
 	{
-		pev->nextthink = gpGlobals->time + 0.25f;
-		CBasePlayer *pl = Cz_Player();
-		if (m_bLoaded)
+			pev->nextthink = gpGlobals->time + 0.05f;
+			CBasePlayer *pl = Cz_Player();
+			Cz_RunQueue(pl);
+			if (m_bLoaded)
 		{
 			if (!pl)
 				return;
@@ -355,10 +405,13 @@ public:
 			g_czLastA = g_czLastC = -1;
 			if ((g_czTools & CZ_ICON_RCBOMB) && !UTIL_FindEntityByClassname(nullptr, "cz_rc_ctl"))
 				CBaseEntity::Create("cz_rc_ctl", pl->pev->origin, g_vecZero, nullptr);
-			Cz_SendIcons(true);
-			return;
-		}
-		m_tools = g_czTools;
+				Cz_SendIcons(true);
+				Cz_SendTool();
+				return;
+			}
+			m_charges = g_rcCharges;
+			m_hold = g_rcHold;
+			m_tools = g_czTools;
 		m_rcState = g_rcState;
 		m_rcDue = g_rcDue;
 		m_rcStep2 = g_rcStep2;
@@ -369,6 +422,8 @@ public:
 	}
 
 	int m_tools = 0;
+	int m_charges = 5;
+	int m_hold = 0;
 	int m_rcState = 0;
 	float m_rcDue = 0, m_rcStep2 = 0, m_plantTime = 0;
 	Vector m_rcPos, m_rcAng;
@@ -378,6 +433,8 @@ public:
 TYPEDESCRIPTION CCZState::m_SaveData[] =
 {
 	DEFINE_FIELD(CCZState, m_tools, FIELD_INTEGER),
+	DEFINE_FIELD(CCZState, m_charges, FIELD_INTEGER),
+	DEFINE_FIELD(CCZState, m_hold, FIELD_INTEGER),
 	DEFINE_FIELD(CCZState, m_rcState, FIELD_INTEGER),
 	DEFINE_FIELD(CCZState, m_rcDue, FIELD_TIME),
 	DEFINE_FIELD(CCZState, m_rcStep2, FIELD_TIME),
@@ -423,6 +480,7 @@ public:
 		pev->movetype = MOVETYPE_NONE;
 		pev->effects = EF_NODRAW;
 		m_prev = true;
+		m_prev2 = true;
 		m_tEnd = 0;
 		SetThink(&CCZRcCtl::CtlThink);
 		pev->nextthink = gpGlobals->time + 0.05f;
@@ -430,12 +488,14 @@ public:
 	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 	void EXPORT CtlThink();
 	bool m_prev;
+	bool m_prev2;
 	float m_tEnd;
 };
 
 TYPEDESCRIPTION CCZRcCtl::m_SaveData[] =
 {
 	DEFINE_FIELD(CCZRcCtl, m_prev, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZRcCtl, m_prev2, FIELD_CHARACTER),
 	DEFINE_FIELD(CCZRcCtl, m_tEnd, FIELD_TIME),
 };
 IMPLEMENT_SAVERESTORE(CCZRcCtl, CBaseEntity)
@@ -457,6 +517,9 @@ void CCZRcCtl::CtlThink()
 	bool atk = (pl->pev->button & IN_ATTACK) != 0;
 	bool edge = atk && !m_prev;
 	m_prev = atk;
+	bool atk2 = (pl->pev->button & IN_ATTACK2) != 0;
+	bool edge2 = atk2 && !m_prev2;
+	m_prev2 = atk2;
 	float now = gpGlobals->time;
 
 	if (g_rcState == 1)
@@ -469,38 +532,20 @@ void CCZRcCtl::CtlThink()
 				UTIL_Remove(old);
 			g_hRcPlanted = CBaseEntity::Create("cz_rc_planted", g_rcPos, g_rcAng, nullptr);
 			g_flRcPlantTime = now;
+			if (g_rcCharges > 0)
+				g_rcCharges--;
+			g_rcHold = 1; // the detonator comes out
 			Cz_RcAnim(pl, 3);
-			g_rcStep2 = now + 1.33f;
+			Cz_QueueAnim(0, 1, 1.33f);
 			g_rcState = 2;
-			ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f\n", g_rcPos.x, g_rcPos.y, g_rcPos.z);
-		}
-		return;
-	}
-
-	if (g_rcState == 2)
-	{
-		if (g_rcStep2 && now >= g_rcStep2)
-		{
-			Cz_RcAnim(pl, 1);
-			g_rcStep2 = 0;
-		}
-		if (edge && g_hRcPlanted && now >= g_flRcPlantTime + 0.5f)
-		{
-			Cz_RcAnim(pl, 7);
-			g_rcDue = now + 1.63f;
-			g_rcStep2 = now + 1.5f;
-			g_rcState = 3;
+			Cz_SendTool();
+			ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f (left %d)\n", g_rcPos.x, g_rcPos.y, g_rcPos.z, g_rcCharges);
 		}
 		return;
 	}
 
 	if (g_rcState == 3)
 	{
-		if (g_rcStep2 && now >= g_rcStep2)
-		{
-			Cz_RcAnim(pl, 5);
-			g_rcStep2 = 0;
-		}
 		if (now < g_rcDue)
 			return;
 
@@ -516,6 +561,7 @@ void CCZRcCtl::CtlThink()
 			WRITE_BYTE(15);
 			WRITE_BYTE(0);
 		MESSAGE_END();
+		UTIL_ScreenShake(pos, 8.0f, 40.0f, 2.0f, 700.0f);
 		if (bomb)
 			EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
 		ALERT(at_aiconsole, "rc bomb detonated at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
@@ -533,23 +579,41 @@ void CCZRcCtl::CtlThink()
 		if (bomb)
 			UTIL_Remove(bomb);
 		g_hRcPlanted = nullptr;
-		g_rcState = 4;
-		g_rcDue = now + 1.1f;     // draw again
-		g_rcStep2 = now + 2.1f;   // idle
-		m_tEnd = now + 5.5f;      // the tool is taken away
+		g_rcState = 0;
+		// the next mine comes out (if any); the tool stays until the player leaves through the door
+		g_rcHold = (g_rcCharges > 0) ? 0 : 1;
+		Cz_QueueAnim(0, 2, 1.1f);
+		Cz_QueueAnim(1, 0, 2.1f);
+		Cz_SendTool();
 		return;
 	}
 
-	if (g_rcState == 4)
+	// idle (nothing planted / planted): buttons
+	if (g_rcState == 0 || g_rcState == 2)
 	{
-		if (g_rcDue && now >= g_rcDue) { Cz_RcAnim(pl, 2); g_rcDue = 0; }
-		else if (!g_rcDue && g_rcStep2 && now >= g_rcStep2) { Cz_RcAnim(pl, 0); g_rcStep2 = 0; }
-		if (now >= m_tEnd)
+		if (edge2)
 		{
-			g_czTools &= ~CZ_ICON_RCBOMB;
-			pl->pev->viewmodel = 0;
-			Cz_SendIcons(true);
-			UTIL_Remove(this);
+			if (g_rcHold == 0)
+			{
+				g_rcHold = 1; // mine -> detonator
+				Cz_RcAnim(pl, 3);
+				Cz_QueueAnim(0, 1, 1.0f);
+				Cz_SendTool();
+			}
+			else if (g_rcCharges > 0)
+			{
+				g_rcHold = 0; // detonator -> mine
+				Cz_RcAnim(pl, 2);
+				Cz_QueueAnim(0, 0, 1.0f);
+				Cz_SendTool();
+			}
+		}
+		else if (edge && g_rcHold == 1 && g_rcState == 2 && g_hRcPlanted && now >= g_flRcPlantTime + 0.5f)
+		{
+			Cz_RcAnim(pl, 7);
+			g_rcDue = now + 1.63f;
+			Cz_QueueAnim(0, 5, 1.5f);
+			g_rcState = 3;
 		}
 	}
 }
@@ -565,6 +629,9 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 	g_czTools = CZ_ICON_RCBOMB;
 	g_hRcPlanted = nullptr;
 	g_rcState = 0;
+	g_rcCharges = 5;
+	g_rcHold = 0;
+	Q_memset(g_tQ, 0, sizeof(g_tQ));
 
 	{
 		int len = 0;
@@ -585,7 +652,26 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 	EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 	ALERT(at_aiconsole, "tool given: weapon_radiocontrolledbomb\n");
 	Cz_SendIcons(true);
+	Cz_SendTool();
 	return true;
+}
+
+// player_weaponstrip ("take_gadgets") takes the mission tools away as well
+void Cz_StripTools()
+{
+	CBasePlayer *pl = Cz_Player();
+	if (!g_czTools && !g_fiberOn)
+		return;
+	ALERT(at_aiconsole, "tools taken away (mask %d)\n", g_czTools);
+	g_czTools = 0;
+	g_rcState = 0;
+	g_rcCharges = 5;
+	g_rcHold = 0;
+	Q_memset(g_tQ, 0, sizeof(g_tQ));
+	if (pl)
+		pl->pev->viewmodel = 0;
+	Cz_SendIcons(true);
+	Cz_SendTool();
 }
 
 // ---------------------------------------------------------------------------
@@ -641,6 +727,9 @@ void CCZToolPickup::Precache()
 	}
 	PRECACHE_SOUND("items/gunpickup2.wav");
 	PRECACHE_MODEL("sprites/glow01.spr");
+	PRECACHE_SOUND("weapons/blowtorch-1.wav");
+	PRECACHE_SOUND("weapons/dryfire1.wav");
+	PRECACHE_SOUND("items/flashlight1.wav");
 	PRECACHE_SOUND("buttons/spark5.wav");
 	PRECACHE_SOUND("buttons/spark6.wav");
 }
@@ -731,6 +820,10 @@ void CCZToolPickup::Pickup(CBaseEntity *pOther)
 	EMIT_SOUND(ENT(pOther->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 	ALERT(at_aiconsole, "tool picked up: %s (mask %d)\n", STRING(pev->classname), g_czTools);
 	Cz_SendIcons(true);
+	Cz_SendTool();
+	// pickup / draw animations of the original: camera 2, torch 2, fiber optic camera 1
+	pOther->pev->weaponanim = (m_bit == CZ_ICON_FIBER) ? 1 : 2;
+	Cz_QueueAnim(0, 0, 1.0f);
 
 	SetTouch(nullptr);
 	UTIL_Remove(this);
@@ -752,11 +845,18 @@ public:
 	void EXPORT EndView();
 
 	EHANDLE m_hViewer;
+	int m_zoom = 0;
+	int m_moveType = 0;
+	float m_tStart = 0;
+	bool m_prev1 = true, m_prev2 = true;
 };
 
 TYPEDESCRIPTION CCZInfoCamera::m_SaveData[] =
 {
 	DEFINE_FIELD(CCZInfoCamera, m_hViewer, FIELD_EHANDLE),
+	DEFINE_FIELD(CCZInfoCamera, m_zoom, FIELD_INTEGER),
+	DEFINE_FIELD(CCZInfoCamera, m_moveType, FIELD_INTEGER),
+	DEFINE_FIELD(CCZInfoCamera, m_tStart, FIELD_TIME),
 };
 IMPLEMENT_SAVERESTORE(CCZInfoCamera, CBaseAnimating)
 
@@ -773,13 +873,19 @@ void CCZInfoCamera::Spawn()
 	UTIL_SetOrigin(pev, pev->origin);
 }
 
+static void Cz_SetFov(CBasePlayer *pl, int fov)
+{
+	pl->m_iFOV = fov;
+	pl->pev->fov = (float)fov;
+	MESSAGE_BEGIN(MSG_ONE, gmsgSetFOV, nullptr, pl->pev);
+		WRITE_BYTE(fov);
+	MESSAGE_END();
+}
+
 void CCZInfoCamera::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
 	CBasePlayer *pl = Cz_Player();
-	if (!pl || !pl->IsAlive())
-		return;
-
-	if (m_hViewer)
+	if (!pl || !pl->IsAlive() || g_fiberOn || !(g_czTools & CZ_ICON_FIBER))
 		return;
 
 	// look at the target entity
@@ -795,24 +901,87 @@ void CCZInfoCamera::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE 
 	}
 
 	m_hViewer = pl;
+	g_fiberOn = true;
+	m_zoom = 0;
+	m_tStart = gpGlobals->time;
 	SET_VIEW(pl->edict(), edict());
-	pl->EnableControl(FALSE);
+	m_moveType = pl->pev->movetype;
+	pl->pev->movetype = MOVETYPE_NONE;
+	pl->pev->velocity = g_vecZero;
+	Cz_SetFov(pl, 120);
+
+	MESSAGE_BEGIN(MSG_ONE, gmsgCzFiber, nullptr, pl->pev);
+		WRITE_BYTE(1);
+		WRITE_BYTE(0);
+	MESSAGE_END();
+
+	pl->pev->weaponanim = 2;
+	Cz_QueueAnim(0, 3, 0.6f);
+	EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/flashlight1.wav", 0.8f, ATTN_NORM);
 
 	ALERT(at_aiconsole, "info_camera '%s': view on\n", STRING(pev->targetname));
 
 	SetThink(&CCZInfoCamera::EndView);
-	pev->nextthink = gpGlobals->time + 4.0f;
+	pev->nextthink = gpGlobals->time + 0.02f;
 }
 
+// while viewing: right button = zoom, left button = leave
 void CCZInfoCamera::EndView()
 {
 	CBasePlayer *pl = Cz_Player();
-	if (pl)
+	if (!pl || !pl->IsAlive())
 	{
-		SET_VIEW(pl->edict(), pl->edict());
-		pl->EnableControl(TRUE);
+		g_fiberOn = false;
+		m_hViewer = nullptr;
+		SetThink(nullptr);
+		return;
 	}
 
+	pev->nextthink = gpGlobals->time + 0.02f;
+
+	bool a1 = (pl->pev->button & IN_ATTACK) != 0;
+	bool a2 = (pl->pev->button & IN_ATTACK2) != 0;
+	pl->pev->velocity = g_vecZero;
+
+	// ignore the press that started the view
+	if (gpGlobals->time < m_tStart + 0.4f)
+	{
+		m_prev1 = a1;
+		m_prev2 = a2;
+		return;
+	}
+
+	if (a2 && !m_prev2)
+	{
+		m_zoom = !m_zoom;
+		Cz_SetFov(pl, m_zoom ? 60 : 120);
+		EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/flashlight1.wav", 0.8f, ATTN_NORM);
+		MESSAGE_BEGIN(MSG_ONE, gmsgCzFiber, nullptr, pl->pev);
+			WRITE_BYTE(1);
+			WRITE_BYTE(m_zoom);
+		MESSAGE_END();
+	}
+
+	bool leave = (a1 && !m_prev1);
+	m_prev1 = a1;
+	m_prev2 = a2;
+
+	if (!leave)
+		return;
+
+	SET_VIEW(pl->edict(), pl->edict());
+	pl->pev->movetype = m_moveType ? m_moveType : MOVETYPE_WALK;
+	Cz_SetFov(pl, 90);
+	MESSAGE_BEGIN(MSG_ONE, gmsgCzFiber, nullptr, pl->pev);
+		WRITE_BYTE(0);
+		WRITE_BYTE(0);
+	MESSAGE_END();
+	pl->pev->weaponanim = 1;
+	Cz_QueueAnim(0, 0, 0.6f);
+	EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/flashlight1.wav", 0.8f, ATTN_NORM);
+
+	g_fiberOn = false;
+	g_fiberExitT = gpGlobals->time;
 	m_hViewer = nullptr;
 	SetThink(nullptr);
 }
@@ -841,6 +1010,7 @@ public:
 	int m_iconBits;   // icons shown while inside
 	float m_holdTime; // how long +use has to be held
 	float m_holdStart;
+	float m_acc = 0;
 	float m_nextUse;
 	bool m_inside;
 	bool m_done;
@@ -861,6 +1031,7 @@ TYPEDESCRIPTION CCZUseTool::m_SaveData[] =
 	DEFINE_FIELD(CCZUseTool, m_iconBits, FIELD_INTEGER),
 	DEFINE_FIELD(CCZUseTool, m_holdTime, FIELD_FLOAT),
 	DEFINE_FIELD(CCZUseTool, m_holdStart, FIELD_TIME),
+	DEFINE_FIELD(CCZUseTool, m_acc, FIELD_FLOAT),
 	DEFINE_FIELD(CCZUseTool, m_nextUse, FIELD_TIME),
 	DEFINE_FIELD(CCZUseTool, m_inside, FIELD_CHARACTER),
 	DEFINE_FIELD(CCZUseTool, m_done, FIELD_CHARACTER),
@@ -949,7 +1120,7 @@ void CCZUseTool::Spawn()
 		else if (!Q_strcmp(tn, "weapon_blowtorch"))
 		{
 			m_need = CZ_ICON_TORCH;
-			m_holdTime = 3.0f;
+			m_holdTime = 1.5f;
 		}
 		else if (!Q_strcmp(tn, "weapon_fiberopticcamera"))
 			m_need = CZ_ICON_FIBER;
@@ -1090,13 +1261,16 @@ void CCZUseTool::ToolThink()
 	if (m_need && !(g_czTools & m_need))
 		return;
 
+	if (g_fiberOn || gpGlobals->time < g_fiberExitT + 0.6f)
+		return;
+
 	if (gpGlobals->time < m_nextUse)
 		return;
 
 	if (m_rcMode)
 	{
-		// plant with the left button (one press), only inside the marked zone
-		if (atkEdge)
+		// plant with the left button (one press), only with a mine in the hands, inside the marked zone
+		if (atkEdge && g_rcHold == 0 && g_rcCharges > 0 && g_rcState == 0)
 		{
 			m_nextUse = gpGlobals->time + 1.0f;
 			Complete(pl);
@@ -1104,10 +1278,55 @@ void CCZUseTool::ToolThink()
 		return;
 	}
 
-	// the blowtorch is used like a weapon: hold fire while touching the lock
-	bool use = (pl->pev->button & ((m_need == CZ_ICON_TORCH) ? IN_ATTACK : IN_USE)) != 0;
-	if (use && m_need == CZ_ICON_TORCH && Cz_MapHasLocks() && !Cz_AimedLock(pl, 110.0f))
-		use = false; // the torch only works on the lock
+	if (m_need == CZ_ICON_CAMERA || m_need == CZ_ICON_FIBER)
+	{
+		if (!atkEdge || (pl->pev->button & IN_ATTACK2))
+			return;
+
+		if (m_need == CZ_ICON_CAMERA)
+		{
+			// the photo must be taken of the marked spot
+			CBaseEntity *tt = FStringNull(m_toolTarget) ? nullptr : UTIL_FindEntityByTargetname(nullptr, STRING(m_toolTarget));
+			if (tt)
+			{
+				UTIL_MakeVectors(pl->pev->v_angle);
+				Vector to = tt->pev->origin - (pl->pev->origin + pl->pev->view_ofs);
+				float dist = to.Length();
+				if (dist > 500.0f || DotProduct(gpGlobals->v_forward, to.Normalize()) < 0.8f)
+					return;
+			}
+			EMIT_SOUND(ENT(pl->pev), CHAN_WEAPON, "weapons/dryfire1.wav", VOL_NORM, ATTN_NORM);
+			pl->pev->weaponanim = 1;
+			Cz_QueueAnim(0, 0, 1.8f);
+			m_nextUse = gpGlobals->time + 2.0f;
+		}
+		else
+			m_nextUse = gpGlobals->time + 1.0f;
+
+		Complete(pl);
+		return;
+	}
+
+	if (m_need == CZ_ICON_TORCH)
+	{
+		// the blowtorch is used like a weapon: a few short presses on the lock (~1.5 s in total), no progress bar
+		bool burn = (pl->pev->button & IN_ATTACK) != 0;
+		if (burn && Cz_MapHasLocks() && !Cz_AimedLock(pl, 110.0f))
+			burn = false;
+		if (!burn)
+			return;
+		m_acc += 0.05f;
+		if (m_acc >= 1.5f)
+		{
+			m_acc = 0;
+			m_nextUse = gpGlobals->time + 1.5f;
+			Complete(pl);
+		}
+		return;
+	}
+
+	// bomb defuse: hold +use
+	bool use = (pl->pev->button & IN_USE) != 0;
 	if (!use)
 	{
 		if (m_holdStart != 0)

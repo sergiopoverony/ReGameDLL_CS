@@ -229,6 +229,8 @@ void CTriggerFreezePlayer::FreezeUse(CBaseEntity *pActivator, CBaseEntity *pCall
 // ---------------------------------------------------------------------------
 // trigger_killtarget: removes every entity named by "target".
 // ---------------------------------------------------------------------------
+bool Cz_KillGeneric(CBaseEntity *pEnt);
+
 class CTriggerKillTarget: public CBaseDelay
 {
 public:
@@ -251,7 +253,14 @@ void CTriggerKillTarget::KillEmAll(CBaseEntity *pActivator, CBaseEntity *pCaller
 
 	CBaseEntity *pTarget = nullptr;
 	while ((pTarget = UTIL_FindEntityByTargetname(pTarget, STRING(pev->target))) != nullptr)
+	{
+		if (!(pev->spawnflags & 1) && Cz_KillGeneric(pTarget))
+			continue;
 		UTIL_Remove(pTarget);
+	}
+
+	if (pev->spawnflags & 2)
+		UTIL_Remove(this);
 }
 
 // ---------------------------------------------------------------------------

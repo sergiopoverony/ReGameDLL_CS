@@ -8870,6 +8870,8 @@ void CDeadHEV::KeyValue(KeyValueData *pkvd)
 	}
 }
 
+void Cz_StripTools();
+
 LINK_ENTITY_TO_CLASS(player_weaponstrip, CStripWeapons, CCSStripWeapons)
 
 void CStripWeapons::KeyValue(KeyValueData *pkvd)
@@ -8919,6 +8921,7 @@ void CStripWeapons::KeyValue(KeyValueData *pkvd)
 void CStripWeapons::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
 	ALERT(at_aiconsole, "player_weaponstrip '%s' used\n", STRING(pev->targetname));
+	Cz_StripTools();
 	CBasePlayer *pPlayer = nullptr;
 	if (pActivator && pActivator->IsPlayer())
 	{
