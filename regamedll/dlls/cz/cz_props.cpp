@@ -390,6 +390,7 @@ public:
 	bool m_bSitting;
 	float m_flSitApplied;
 	float m_flMoveYaw;
+	float m_flYawBias = 0; // original quirk: a scripted walk starts ~35 deg to the left of the goal and straightens out
 	float m_flLastMove;
 	float m_flStuckSince;
 	float m_flProgDist = 0, m_flProgTime = 0;
@@ -672,7 +673,14 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		return false;
 	}
 
-	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) : m_flMoveYaw;
+	if (m_flYawBias > 0.0f)
+	{
+		m_flYawBias -= 22.0f * dt; // ~1.6 s to straighten out
+		if (m_flYawBias < 0.0f || d < 96.0f)
+			m_flYawBias = 0.0f;
+	}
+
+	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) + m_flYawBias : m_flMoveYaw;
 	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, 540.0f * dt);
 
 	if (finalLeg && (d <= stopDist || d <= step + 1.0f))
@@ -722,7 +730,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	{
 		static const float angles[] = { 0, 25, -25, 50, -50, 75, -75, 100, -100 };
 		bool found = false;
-		float baseYaw = UTIL_VecToYaw(dir);
+		float baseYaw = UTIL_VecToYaw(dir) + m_flYawBias;
 
 		pev->flags |= FL_ONGROUND;
 
@@ -1035,6 +1043,7 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (m_fMoveTo == 1 || m_fMoveTo == 2)
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
+		npc->m_flYawBias = 35.0f;
 
 		m_state = 1;
 		SetThink(&CCZScriptedSequence::ScriptThink);

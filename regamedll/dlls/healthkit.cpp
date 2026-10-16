@@ -140,7 +140,14 @@ void CWallHealth::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 	// CZ: wall medkit has two single-press uses
 	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
 	{
-		if (m_iCzUses >= 2 || !(pActivator->pev->weapons & (1 << WEAPON_SUIT)) || !pActivator->CanTakeHealth(1))
+		// the wall has two medkits (two brushes): two single-press uses in total, each one empties one picture
+		int used = 0;
+		CBaseEntity *pe = nullptr;
+		while ((pe = UTIL_FindEntityByClassname(pe, "func_healthcharger")) != nullptr)
+			if (pe->pev->frame != 0.0f)
+				used++;
+
+		if (m_iCzUses >= 2 || (used >= 2) || !(pActivator->pev->weapons & (1 << WEAPON_SUIT)) || !pActivator->CanTakeHealth(1))
 		{
 			EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/medshotno1.wav", VOL_NORM, ATTN_NORM);
 			return;
@@ -148,8 +155,20 @@ void CWallHealth::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 		pActivator->TakeHealth(50, DMG_GENERIC);
 		EMIT_SOUND(ENT(pev), CHAN_ITEM, "items/medshot4.wav", VOL_NORM, ATTN_NORM);
 		m_iCzUses++;
-		// brush frame != 0 selects the alternate (empty) texture set: only after the last use
-		pev->frame = (m_iCzUses >= 2) ? 1.0f : 0.0f;
+
+		// empty this picture, or the other one if this one is already empty
+		if (pev->frame == 0.0f)
+			pev->frame = 1.0f;
+		else
+		{
+			pe = nullptr;
+			while ((pe = UTIL_FindEntityByClassname(pe, "func_healthcharger")) != nullptr)
+				if (pe->pev->frame == 0.0f)
+				{
+					pe->pev->frame = 1.0f;
+					break;
+				}
+		}
 		return;
 	}
 

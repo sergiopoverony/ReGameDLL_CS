@@ -1095,8 +1095,8 @@ void CGlow::Spawn()
 		g_czGlowCvar = true;
 	}
 
-	if (pev->rendermode == kRenderGlow && pev->scale > 0.0f && CVAR_GET_FLOAT("cz_glow_scale") > 0.0f)
-		pev->scale *= CVAR_GET_FLOAT("cz_glow_scale");
+	// the shrink is applied once, shortly after spawn, only to glows near the player start (see Think)
+	pev->iuser4 = 0;
 
 	pev->solid = SOLID_NOT;
 	pev->movetype = MOVETYPE_NONE;
@@ -1108,7 +1108,9 @@ void CGlow::Spawn()
 
 	m_maxFrame = float(MODEL_FRAMES(pev->modelindex) - 1);
 
-	if (m_maxFrame > 1.0f && pev->framerate != 0.0f)
+	if (pev->rendermode == kRenderGlow && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		pev->nextthink = gpGlobals->time + 0.2f;
+	else if (m_maxFrame > 1.0f && pev->framerate != 0.0f)
 	{
 		pev->nextthink = gpGlobals->time + 0.1f;
 	}
@@ -1118,6 +1120,25 @@ void CGlow::Spawn()
 
 void CGlow::Think()
 {
+	if (pev->iuser4 == 0)
+	{
+		pev->iuser4 = 1;
+
+		// CZ:DS: glows in the very first room are too bright with the Xash renderer, the rest of the level is fine
+		CBaseEntity *pStart = UTIL_FindEntityByClassname(nullptr, "info_player_start");
+		if (!pStart)
+			pStart = UTIL_FindEntityByClassname(nullptr, "info_player_deathmatch");
+
+		if (pStart && pev->scale > 0.0f && (pev->origin - pStart->pev->origin).Length() < 700.0f)
+			pev->scale *= CVAR_GET_FLOAT("cz_glow_scale");
+
+		if (!(m_maxFrame > 1.0f && pev->framerate != 0.0f))
+		{
+			pev->nextthink = 0;
+			return;
+		}
+	}
+
 	Animate(pev->framerate * (gpGlobals->time - m_lastTime));
 
 	pev->nextthink = gpGlobals->time + 0.1f;

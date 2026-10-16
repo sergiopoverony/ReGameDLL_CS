@@ -5,6 +5,8 @@
 // models/seal.mdl: bodygroup 1 = head (4), bodygroup 2 = weapon:
 //   0 mp5, 1 shotgun, 2 law, 3 scout, 4 m4a1, 5 usp, 6 m60, 7 mac-10, 8 blank; skin 3 = SWAT uniform.
 
+bool g_czMakerSpawn = false; // set by monstermaker while it creates a monster
+
 class CCZSoldier: public CBaseAnimating
 {
 public:
@@ -18,6 +20,7 @@ public:
 	void PlayAnim(const char *name);
 	void Settle();
 	bool m_bPlatMoved;
+	bool m_bMade;
 	void React(int type); // 1 = flashbang, 2 = smoke grenade
 
 	int m_head;
@@ -248,6 +251,7 @@ void CCZSoldier::Spawn()
 
 	m_hPlat = nullptr;
 	m_bPlatMoved = false;
+	m_bMade = g_czMakerSpawn;
 	Settle();
 
 	InitBoneControllers();
@@ -274,6 +278,53 @@ void CCZSoldier::Spawn()
 // CZ: a soldier made inside a moving cage/lift (train02) must stand on its floor and ride it.
 void CCZSoldier::Settle()
 {
+	if (m_bMade)
+	{
+		// made by a monstermaker: stay exactly where the mapper put it (the floor of the lowered cage)
+		// and ride the moving brush entity that contains this spot
+		m_hPlat = nullptr;
+		CBaseEntity *best = nullptr;
+		float bestTop = -99999.0f;
+		CBaseEntity *e = nullptr;
+		while ((e = UTIL_FindEntityByClassname(e, "func_door")) != nullptr)
+		{
+			Vector mn = e->pev->absmin, mx = e->pev->absmax;
+			if (pev->origin.x < mn.x - 8 || pev->origin.x > mx.x + 8 || pev->origin.y < mn.y - 8 || pev->origin.y > mx.y + 8)
+				continue;
+			if (pev->origin.z < mn.z - 24 || pev->origin.z > mx.z + 24)
+				continue;
+			if (mx.z > bestTop && mx.z <= pev->origin.z + 24)
+			{
+				bestTop = mx.z;
+				best = e;
+			}
+		}
+
+		if (!best)
+		{
+			e = nullptr;
+			while ((e = UTIL_FindEntityByClassname(e, "func_door")) != nullptr)
+			{
+				Vector mn = e->pev->absmin, mx = e->pev->absmax;
+				if (pev->origin.x >= mn.x - 8 && pev->origin.x <= mx.x + 8 && pev->origin.y >= mn.y - 8 && pev->origin.y <= mx.y + 8 && pev->origin.z >= mn.z - 24 && pev->origin.z <= mx.z + 24)
+				{
+					best = e;
+					break;
+				}
+			}
+		}
+
+		if (best)
+		{
+			m_hPlat = best;
+			m_platOfs = pev->origin - best->pev->origin;
+			ALERT(at_console, "soldier: rides %s (%s) at %.0f %.0f %.0f\n", STRING(best->pev->classname), STRING(best->pev->targetname), pev->origin.x, pev->origin.y, pev->origin.z);
+		}
+		else
+			ALERT(at_console, "soldier: maker spawn at %.0f %.0f %.0f, no door under\n", pev->origin.x, pev->origin.y, pev->origin.z);
+		return;
+	}
+
 	// get out of solid geometry
 	for (int i = 0; i < 32; i++)
 	{
@@ -389,12 +440,13 @@ void CCZSoldier::AnimThink()
 	CBaseEntity *plat = m_hPlat;
 	if (plat)
 	{
-		if (plat->pev->velocity.Length() > 1.0f)
-		{
+		Vector want = plat->pev->origin + m_platOfs;
+		if ((want - pev->origin).Length() > 0.1f)
+			UTIL_SetOrigin(pev, want);
+
+		if (!m_bMade && plat->pev->velocity.Length() > 1.0f)
 			m_bPlatMoved = true;
-			UTIL_SetOrigin(pev, plat->pev->origin + m_platOfs);
-		}
-		else if (m_bPlatMoved)
+		else if (!m_bMade && m_bPlatMoved)
 		{
 			m_bPlatMoved = false;
 			Settle(); // the lift has stopped: stand firmly on its floor
@@ -515,7 +567,9 @@ void CCZMonsterMaker::MakeMonster()
 	if (FStringNull(m_iszMonsterType))
 		return;
 
+	g_czMakerSpawn = true;
 	CBaseEntity *pNew = CBaseEntity::Create(STRING(m_iszMonsterType), pev->origin, pev->angles, edict());
+	g_czMakerSpawn = false;
 	if (!pNew)
 	{
 		ALERT(at_console, "monstermaker: can't create '%s'\n", STRING(m_iszMonsterType));

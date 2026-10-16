@@ -102,6 +102,118 @@ static bool Cz_Overlaps(CBaseEntity *a, CBaseEntity *b)
 }
 
 // ---------------------------------------------------------------------------
+// blowtorch effects: a flame at the tip while held, sparks + light while "firing" on a close target
+// ---------------------------------------------------------------------------
+class CCZTorchFx: public CBaseEntity
+{
+public:
+	virtual void Spawn();
+	virtual int ObjectCaps() { return (CBaseEntity::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
+	void EXPORT FxThink();
+
+	float m_nextLight;
+	float m_nextSound;
+	bool m_wasAttack;
+};
+
+LINK_ENTITY_TO_CLASS(cz_torch_fx, CCZTorchFx, CCSTorchFx)
+
+void CCZTorchFx::Spawn()
+{
+	pev->solid = SOLID_NOT;
+	pev->movetype = MOVETYPE_NONE;
+	pev->effects = EF_NODRAW;
+	m_nextLight = m_nextSound = 0;
+	m_wasAttack = false;
+	SetThink(&CCZTorchFx::FxThink);
+	pev->nextthink = gpGlobals->time + 0.05f;
+}
+
+void CCZTorchFx::FxThink()
+{
+	pev->nextthink = gpGlobals->time + 0.05f;
+
+	CBasePlayer *pl = Cz_Player();
+	if (!pl || !pl->IsAlive() || !(g_czTools & CZ_ICON_TORCH))
+		return;
+
+	// the tool stays in the hands unless the player picked a real weapon
+	if (!pl->m_pActiveItem && FStringNull(pl->pev->viewmodel))
+		pl->pev->viewmodel = MAKE_STRING("models/v_btorch.mdl");
+
+	UTIL_MakeVectors(pl->pev->v_angle);
+	Vector eye = pl->pev->origin + pl->pev->view_ofs;
+	bool attack = (pl->pev->button & IN_ATTACK) != 0;
+
+	// tip of the torch, a little to the right and down from the crosshair
+	Vector tip = eye + gpGlobals->v_forward * 22.0f + gpGlobals->v_right * 6.0f - gpGlobals->v_up * 5.0f;
+
+	if (gpGlobals->time >= m_nextLight)
+	{
+		m_nextLight = gpGlobals->time + 0.1f;
+
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, tip);
+			WRITE_BYTE(TE_DLIGHT);
+			WRITE_COORD(tip.x);
+			WRITE_COORD(tip.y);
+			WRITE_COORD(tip.z);
+			WRITE_BYTE(attack ? 14 : 5);   // radius, 10 units
+			WRITE_BYTE(255);
+			WRITE_BYTE(attack ? 200 : 140);
+			WRITE_BYTE(attack ? 120 : 40);
+			WRITE_BYTE(2);                 // life, 0.1 s
+			WRITE_BYTE(0);
+		MESSAGE_END();
+	}
+
+	if (!attack)
+	{
+		m_wasAttack = false;
+		return;
+	}
+
+	if (!m_wasAttack)
+	{
+		m_wasAttack = true;
+		pl->pev->weaponanim = 1;
+	}
+
+	// like a knife: only a very short reach
+	TraceResult tr;
+	UTIL_TraceLine(eye, eye + gpGlobals->v_forward * 56.0f, dont_ignore_monsters, pl->edict(), &tr);
+	if (tr.flFraction >= 1.0f)
+		return;
+
+	Vector hit = tr.vecEndPos + tr.vecPlaneNormal * 2.0f;
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, hit);
+		WRITE_BYTE(TE_SPARKS);
+		WRITE_COORD(hit.x);
+		WRITE_COORD(hit.y);
+		WRITE_COORD(hit.z);
+	MESSAGE_END();
+
+	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, hit);
+		WRITE_BYTE(TE_DLIGHT);
+		WRITE_COORD(hit.x);
+		WRITE_COORD(hit.y);
+		WRITE_COORD(hit.z);
+		WRITE_BYTE(12);
+		WRITE_BYTE(255);
+		WRITE_BYTE(210);
+		WRITE_BYTE(140);
+		WRITE_BYTE(2);
+		WRITE_BYTE(0);
+	MESSAGE_END();
+
+	if (gpGlobals->time >= m_nextSound)
+	{
+		m_nextSound = gpGlobals->time + 0.35f;
+		EMIT_SOUND(pl->edict(), CHAN_WEAPON, (RANDOM_LONG(0, 1) ? "buttons/spark5.wav" : "buttons/spark6.wav"), 0.6f, ATTN_NORM);
+	}
+}
+
+// ---------------------------------------------------------------------------
 // tool pickups
 // ---------------------------------------------------------------------------
 class CCZToolPickup: public CBaseAnimating
@@ -144,6 +256,8 @@ void CCZToolPickup::Precache()
 		}
 	}
 	PRECACHE_SOUND("items/gunpickup2.wav");
+	PRECACHE_SOUND("buttons/spark5.wav");
+	PRECACHE_SOUND("buttons/spark6.wav");
 }
 
 void CCZToolPickup::Spawn()
@@ -214,6 +328,9 @@ void CCZToolPickup::PickupTouch(CBaseEntity *pOther)
 void CCZToolPickup::Pickup(CBaseEntity *pOther)
 {
 	g_czTools |= m_bit;
+
+	if (m_bit == CZ_ICON_TORCH && !UTIL_FindEntityByClassname(nullptr, "cz_torch_fx"))
+		CBaseEntity::Create("cz_torch_fx", pev->origin, g_vecZero, nullptr);
 
 	// the tool is in the hands now
 	{
@@ -481,7 +598,8 @@ void CCZUseTool::ToolThink()
 	if (gpGlobals->time < m_nextUse)
 		return;
 
-	bool use = (pl->pev->button & IN_USE) != 0;
+	// the blowtorch is used like a weapon: hold fire while touching the lock
+	bool use = (pl->pev->button & ((m_need == CZ_ICON_TORCH) ? (IN_ATTACK | IN_USE) : IN_USE)) != 0;
 	if (!use)
 	{
 		if (m_holdStart != 0)

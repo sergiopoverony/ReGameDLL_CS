@@ -210,6 +210,7 @@ class CCSCzSoldier: public CCSAnimating {};
 class CCSMonsterMaker: public CCSDelay {};
 class CCSMonsterNPC: public CCSAnimating {};
 class CCSCzToolPickup: public CCSAnimating {};
+class CCSTorchFx: public CCSEntity {};
 class CCSCzInfoCamera: public CCSAnimating {};
 class CCSMissionFailure: public CCSDelay {};
 class CCSRenderFxManager: public CCSEntity {};
