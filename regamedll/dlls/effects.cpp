@@ -1085,6 +1085,7 @@ IMPLEMENT_SAVERESTORE(CGlow, CPointEntity)
 
 // CZ:DS maps use big env_glow scales (5..7); the Xash glow renderer makes them far too bright/large
 static cvar_t cz_glow_scale = { "cz_glow_scale", "0.17", 0, 0.17f, nullptr };
+static cvar_t cz_glow_mode = { "cz_glow_mode", "2", 0, 2.0f, nullptr }; // 0 = keep glow, else a render mode (2 texture, 4 alpha, 5 additive)
 static bool g_czGlowCvar = false;
 
 void CGlow::Spawn()
@@ -1092,6 +1093,7 @@ void CGlow::Spawn()
 	if (!g_czGlowCvar)
 	{
 		CVAR_REGISTER(&cz_glow_scale);
+		CVAR_REGISTER(&cz_glow_mode);
 		g_czGlowCvar = true;
 	}
 
@@ -1131,6 +1133,11 @@ void CGlow::Think()
 
 		if (pStart && pev->scale > 0.0f && (pev->origin - pStart->pev->origin).Length() < 700.0f)
 			pev->scale *= CVAR_GET_FLOAT("cz_glow_scale");
+
+		// the retail engine blends these sprites, the Xash glow mode makes them additive and much brighter
+		int mode = (int)CVAR_GET_FLOAT("cz_glow_mode");
+		if (mode > 0 && pev->rendermode == kRenderGlow)
+			pev->rendermode = mode;
 
 		if (!(m_maxFrame > 1.0f && pev->framerate != 0.0f))
 		{

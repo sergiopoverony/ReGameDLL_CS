@@ -21,6 +21,8 @@ public:
 	void Settle();
 	bool m_bPlatMoved;
 	bool m_bMade;
+	float m_flSettleAt = 0;
+	void StandOnFloor();
 	void React(int type); // 1 = flashbang, 2 = smoke grenade
 
 	int m_head;
@@ -354,6 +356,28 @@ void CCZSoldier::Settle()
 		ALERT(at_console, "soldier: no moving platform under %.0f %.0f %.0f\n", pev->origin.x, pev->origin.y, pev->origin.z);
 }
 
+// put the feet on the floor below (the cage floor), keep riding that brush
+void CCZSoldier::StandOnFloor()
+{
+	TraceResult tr;
+	UTIL_TraceLine(pev->origin + Vector(0, 0, 24), pev->origin - Vector(0, 0, 300), ignore_monsters, ENT(pev), &tr);
+	if (tr.fStartSolid || tr.flFraction >= 1.0f)
+		return;
+
+	pev->origin.z = tr.vecEndPos.z;
+	UTIL_SetOrigin(pev, pev->origin);
+
+	CBaseEntity *h = CBaseEntity::Instance(tr.pHit);
+	if (h && h->pev->movetype == MOVETYPE_PUSH && h->pev->solid != SOLID_NOT)
+		m_hPlat = h;
+
+	CBaseEntity *plat = m_hPlat;
+	if (plat)
+		m_platOfs = pev->origin - plat->pev->origin;
+
+	ALERT(at_console, "soldier: stands on floor z %.0f (%s)\n", pev->origin.z, h ? STRING(h->pev->classname) : "?");
+}
+
 void CCZSoldier::PlayAnim(const char *name)
 {
 	int seq = LookupSequence(name);
@@ -444,9 +468,29 @@ void CCZSoldier::AnimThink()
 		if ((want - pev->origin).Length() > 0.1f)
 			UTIL_SetOrigin(pev, want);
 
-		if (!m_bMade && plat->pev->velocity.Length() > 1.0f)
+		if (m_bMade)
+		{
+			if (plat->pev->velocity.Length() > 1.0f)
+			{
+				m_bPlatMoved = true;
+				m_flSettleAt = 0;
+			}
+			else if (m_bPlatMoved || m_flSettleAt == 0)
+			{
+				// the cage stopped (or we just appeared): wait a moment, then stand on its floor
+				if (m_flSettleAt == 0)
+					m_flSettleAt = gpGlobals->time + 0.4f;
+				else if (gpGlobals->time >= m_flSettleAt)
+				{
+					m_bPlatMoved = false;
+					m_flSettleAt = -1;
+					StandOnFloor();
+				}
+			}
+		}
+		else if (plat->pev->velocity.Length() > 1.0f)
 			m_bPlatMoved = true;
-		else if (!m_bMade && m_bPlatMoved)
+		else if (m_bPlatMoved)
 		{
 			m_bPlatMoved = false;
 			Settle(); // the lift has stopped: stand firmly on its floor

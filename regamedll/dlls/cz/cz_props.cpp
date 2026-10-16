@@ -390,6 +390,7 @@ public:
 	bool m_bSitting;
 	float m_flSitApplied;
 	float m_flMoveYaw;
+	float m_flBiasD0 = 0;
 	float m_flYawBias = 0; // original quirk: a scripted walk starts ~35 deg to the left of the goal and straightens out
 	float m_flLastMove;
 	float m_flStuckSince;
@@ -675,8 +676,10 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 
 	if (m_flYawBias > 0.0f)
 	{
-		m_flYawBias -= 22.0f * dt; // ~1.6 s to straighten out
-		if (m_flYawBias < 0.0f || d < 96.0f)
+		// walk off to the left of the goal until half of the way is done, then turn to it
+		if (m_flBiasD0 <= 0.0f)
+			m_flBiasD0 = d;
+		if (d < m_flBiasD0 * 0.5f || d < 96.0f)
 			m_flYawBias = 0.0f;
 	}
 
@@ -1044,6 +1047,7 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
 		npc->m_flYawBias = 35.0f;
+		npc->m_flBiasD0 = 0.0f;
 
 		m_state = 1;
 		SetThink(&CCZScriptedSequence::ScriptThink);

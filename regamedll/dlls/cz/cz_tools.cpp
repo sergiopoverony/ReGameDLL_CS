@@ -104,6 +104,51 @@ static bool Cz_Overlaps(CBaseEntity *a, CBaseEntity *b)
 // ---------------------------------------------------------------------------
 // blowtorch effects: a flame at the tip while held, sparks + light while "firing" on a close target
 // ---------------------------------------------------------------------------
+static cvar_t cz_torch_fwd   = { "cz_torch_fwd",   "24", 0, 24.0f, nullptr };
+static cvar_t cz_torch_right = { "cz_torch_right", "7",  0, 7.0f,  nullptr };
+static cvar_t cz_torch_up    = { "cz_torch_up",    "-6", 0, -6.0f, nullptr };
+static cvar_t cz_torch_scale = { "cz_torch_scale", "0.25", 0, 0.25f, nullptr };
+static bool g_czTorchCvars = false;
+
+// the padlock the player is aiming at (item_generic with a padlock model), or null
+static CBaseEntity *Cz_AimedLock(CBasePlayer *pl, float maxDist = 90.0f)
+{
+	UTIL_MakeVectors(pl->pev->v_angle);
+	Vector eye = pl->pev->origin + pl->pev->view_ofs;
+	CBaseEntity *best = nullptr;
+	float bestDot = 0.93f;
+
+	CBaseEntity *e = nullptr;
+	while ((e = UTIL_FindEntityByClassname(e, "item_generic")) != nullptr)
+	{
+		if (!e->pev->model || !Q_strstr(STRING(e->pev->model), "padlock"))
+			continue;
+
+		Vector to = e->pev->origin - eye;
+		float dist = to.Length();
+		if (dist > maxDist || dist < 1.0f)
+			continue;
+
+		float dot = DotProduct(gpGlobals->v_forward, to * (1.0f / dist));
+		if (dot > bestDot)
+		{
+			bestDot = dot;
+			best = e;
+		}
+	}
+
+	return best;
+}
+
+static bool Cz_MapHasLocks()
+{
+	CBaseEntity *e = nullptr;
+	while ((e = UTIL_FindEntityByClassname(e, "item_generic")) != nullptr)
+		if (e->pev->model && Q_strstr(STRING(e->pev->model), "padlock"))
+			return true;
+	return false;
+}
+
 class CCZTorchFx: public CBaseEntity
 {
 public:
@@ -114,56 +159,72 @@ public:
 	float m_nextLight;
 	float m_nextSound;
 	bool m_wasAttack;
+	EHANDLE m_hFlame;
 };
 
 LINK_ENTITY_TO_CLASS(cz_torch_fx, CCZTorchFx, CCSTorchFx)
 
 void CCZTorchFx::Spawn()
 {
+	if (!g_czTorchCvars)
+	{
+		g_czTorchCvars = true;
+		CVAR_REGISTER(&cz_torch_fwd);
+		CVAR_REGISTER(&cz_torch_right);
+		CVAR_REGISTER(&cz_torch_up);
+		CVAR_REGISTER(&cz_torch_scale);
+	}
+
 	pev->solid = SOLID_NOT;
 	pev->movetype = MOVETYPE_NONE;
 	pev->effects = EF_NODRAW;
 	m_nextLight = m_nextSound = 0;
 	m_wasAttack = false;
+	m_hFlame = nullptr;
 	SetThink(&CCZTorchFx::FxThink);
 	pev->nextthink = gpGlobals->time + 0.05f;
 }
 
 void CCZTorchFx::FxThink()
 {
-	pev->nextthink = gpGlobals->time + 0.05f;
+	pev->nextthink = gpGlobals->time + 0.02f;
 
 	CBasePlayer *pl = Cz_Player();
-	if (!pl || !pl->IsAlive() || !(g_czTools & CZ_ICON_TORCH))
-		return;
+	CSprite *flame = (CSprite *)(CBaseEntity *)m_hFlame;
 
-	// the tool stays in the hands unless the player picked a real weapon
-	if (!pl->m_pActiveItem && FStringNull(pl->pev->viewmodel))
+	bool holding = pl && pl->IsAlive() && (g_czTools & CZ_ICON_TORCH) && !pl->m_pActiveItem;
+	if (!holding)
+	{
+		if (flame)
+			flame->pev->effects |= EF_NODRAW;
+		return;
+	}
+
+	if (FStringNull(pl->pev->viewmodel))
 		pl->pev->viewmodel = MAKE_STRING("models/v_btorch.mdl");
 
 	UTIL_MakeVectors(pl->pev->v_angle);
 	Vector eye = pl->pev->origin + pl->pev->view_ofs;
 	bool attack = (pl->pev->button & IN_ATTACK) != 0;
 
-	// tip of the torch, a little to the right and down from the crosshair
-	Vector tip = eye + gpGlobals->v_forward * 22.0f + gpGlobals->v_right * 6.0f - gpGlobals->v_up * 5.0f;
+	// visible flame at the tip of the torch (tweak with cz_torch_fwd / right / up / scale)
+	Vector tip = eye + gpGlobals->v_forward * cz_torch_fwd.value + gpGlobals->v_right * cz_torch_right.value + gpGlobals->v_up * cz_torch_up.value;
 
-	if (gpGlobals->time >= m_nextLight)
+	if (!flame)
 	{
-		m_nextLight = gpGlobals->time + 0.1f;
+		flame = CSprite::SpriteCreate("sprites/glow01.spr", tip, FALSE);
+		if (flame)
+		{
+			flame->SetTransparency(kRenderTransAdd, 255, 150, 50, 220, kRenderFxNone);
+			m_hFlame = flame;
+		}
+	}
 
-		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, tip);
-			WRITE_BYTE(TE_DLIGHT);
-			WRITE_COORD(tip.x);
-			WRITE_COORD(tip.y);
-			WRITE_COORD(tip.z);
-			WRITE_BYTE(attack ? 14 : 5);   // radius, 10 units
-			WRITE_BYTE(255);
-			WRITE_BYTE(attack ? 200 : 140);
-			WRITE_BYTE(attack ? 120 : 40);
-			WRITE_BYTE(2);                 // life, 0.1 s
-			WRITE_BYTE(0);
-		MESSAGE_END();
+	if (flame)
+	{
+		flame->pev->effects &= ~EF_NODRAW;
+		flame->pev->scale = cz_torch_scale.value * (attack ? 1.5f : 1.0f);
+		UTIL_SetOrigin(flame->pev, tip);
 	}
 
 	if (!attack)
@@ -178,33 +239,37 @@ void CCZTorchFx::FxThink()
 		pl->pev->weaponanim = 1;
 	}
 
-	// like a knife: only a very short reach
-	TraceResult tr;
-	UTIL_TraceLine(eye, eye + gpGlobals->v_forward * 56.0f, dont_ignore_monsters, pl->edict(), &tr);
-	if (tr.flFraction >= 1.0f)
+	// sparks and light come from the lock, and only when the torch touches it
+	CBaseEntity *lock = Cz_AimedLock(pl);
+	if (!lock)
 		return;
 
-	Vector hit = tr.vecEndPos + tr.vecPlaneNormal * 2.0f;
+	Vector hit = lock->pev->origin + (eye - lock->pev->origin).Normalize() * 3.0f;
 
-	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, hit);
-		WRITE_BYTE(TE_SPARKS);
-		WRITE_COORD(hit.x);
-		WRITE_COORD(hit.y);
-		WRITE_COORD(hit.z);
-	MESSAGE_END();
+	if (gpGlobals->time >= m_nextLight)
+	{
+		m_nextLight = gpGlobals->time + 0.1f;
 
-	MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, hit);
-		WRITE_BYTE(TE_DLIGHT);
-		WRITE_COORD(hit.x);
-		WRITE_COORD(hit.y);
-		WRITE_COORD(hit.z);
-		WRITE_BYTE(12);
-		WRITE_BYTE(255);
-		WRITE_BYTE(210);
-		WRITE_BYTE(140);
-		WRITE_BYTE(2);
-		WRITE_BYTE(0);
-	MESSAGE_END();
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, hit);
+			WRITE_BYTE(TE_SPARKS);
+			WRITE_COORD(hit.x);
+			WRITE_COORD(hit.y);
+			WRITE_COORD(hit.z);
+		MESSAGE_END();
+
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, hit);
+			WRITE_BYTE(TE_DLIGHT);
+			WRITE_COORD(hit.x);
+			WRITE_COORD(hit.y);
+			WRITE_COORD(hit.z);
+			WRITE_BYTE(14);
+			WRITE_BYTE(255);
+			WRITE_BYTE(200);
+			WRITE_BYTE(110);
+			WRITE_BYTE(2);
+			WRITE_BYTE(0);
+		MESSAGE_END();
+	}
 
 	if (gpGlobals->time >= m_nextSound)
 	{
@@ -256,6 +321,7 @@ void CCZToolPickup::Precache()
 		}
 	}
 	PRECACHE_SOUND("items/gunpickup2.wav");
+	PRECACHE_MODEL("sprites/glow01.spr");
 	PRECACHE_SOUND("buttons/spark5.wav");
 	PRECACHE_SOUND("buttons/spark6.wav");
 }
@@ -599,7 +665,9 @@ void CCZUseTool::ToolThink()
 		return;
 
 	// the blowtorch is used like a weapon: hold fire while touching the lock
-	bool use = (pl->pev->button & ((m_need == CZ_ICON_TORCH) ? (IN_ATTACK | IN_USE) : IN_USE)) != 0;
+	bool use = (pl->pev->button & ((m_need == CZ_ICON_TORCH) ? IN_ATTACK : IN_USE)) != 0;
+	if (use && m_need == CZ_ICON_TORCH && Cz_MapHasLocks() && !Cz_AimedLock(pl, 110.0f))
+		use = false; // the torch only works on the lock
 	if (!use)
 	{
 		if (m_holdStart != 0)
