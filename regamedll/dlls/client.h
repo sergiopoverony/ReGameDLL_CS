@@ -290,6 +290,7 @@ extern int gmsgSpecHealth2;
 extern int gmsgBarTime2;
 extern int gmsgBotProgress;
 extern int gmsgBrass;
+extern int gmsgHudIcons;
 extern int gmsgFog;
 extern int gmsgShowTimer;
 extern int gmsgAccount;

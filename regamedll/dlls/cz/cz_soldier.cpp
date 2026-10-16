@@ -35,6 +35,127 @@ LINK_ENTITY_TO_CLASS(monster_ct_swat_grenader, CCZSoldier, CCSCzSoldier)
 LINK_ENTITY_TO_CLASS(monster_ct_swat_law, CCZSoldier, CCSCzSoldier)
 LINK_ENTITY_TO_CLASS(monster_ct_swat_melee, CCZSoldier, CCSCzSoldier)
 LINK_ENTITY_TO_CLASS(monster_ct_swat_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gign_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_gsg9_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_sas_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_spetsnaz_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_ct_swat_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_arctic_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_asian_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_desert_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_jungle_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_russian_kamakazi, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_pistol, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_smg, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_mp, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_mp5, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_shotgun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_assaultrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_sniperrifle, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_machinegun, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_grenader, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_law, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_melee, CCZSoldier, CCSCzSoldier)
+LINK_ENTITY_TO_CLASS(monster_terrorist_urban_kamakazi, CCZSoldier, CCSCzSoldier)
 
 struct SoldierWeapon
 {
@@ -48,6 +169,7 @@ static const SoldierWeapon g_soldierWeapons[] =
 	{ "pistol",       5, "idle1" },
 	{ "smg",          7, "idle1" },
 	{ "mp5",          0, "idle1" },
+	{ "mp",           0, "idle1" },
 	{ "shotgun",      1, "idle1" },
 	{ "assaultrifle", 4, "idle1" },
 	{ "sniperrifle",  3, "idle1" },
@@ -94,6 +216,7 @@ void CCZSoldier::KeyValue(KeyValueData *pkvd)
 void CCZSoldier::Precache()
 {
 	PRECACHE_MODEL("models/seal.mdl");
+	PRECACHE_MODEL("models/terror.mdl");
 	PRECACHE_SOUND("ct/ct_blinded_am.wav");
 	PRECACHE_SOUND("ct/ct_incoming_am.wav");
 	PRECACHE_SOUND("ct/ct_damnsmoke_am.wav");
@@ -105,14 +228,16 @@ void CCZSoldier::Spawn()
 	Precache();
 
 	m_react = 0;
-	pev->model = MAKE_STRING("models/seal.mdl");
-	SET_MODEL(ENT(pev), "models/seal.mdl");
+	const bool isTerror = Q_strstr(STRING(pev->classname), "terrorist") != nullptr;
+	const char *mdl = isTerror ? "models/terror.mdl" : "models/seal.mdl";
+	pev->model = MAKE_STRING(mdl);
+	SET_MODEL(ENT(pev), mdl);
 
 	pev->movetype = MOVETYPE_NONE;
 	pev->solid = SOLID_SLIDEBOX;
 	pev->takedamage = DAMAGE_NO;
 	pev->health = 100;
-	pev->skin = 3; // SWAT uniform
+	pev->skin = isTerror ? 0 : (Q_strstr(STRING(pev->classname), "_swat_") ? 3 : 0); // SWAT uniform
 
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72));
 	UTIL_SetOrigin(pev, pev->origin);

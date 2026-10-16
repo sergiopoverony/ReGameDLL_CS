@@ -79,6 +79,7 @@ int gmsgSpecHealth2 = 0;
 int gmsgBarTime2 = 0;
 int gmsgBotProgress = 0;
 int gmsgBrass = 0;
+int gmsgHudIcons = 0;
 int gmsgFog = 0;
 int gmsgShowTimer = 0;
 int gmsgAccount = 0;
@@ -222,6 +223,7 @@ void LinkUserMessages()
 	gmsgLocation      = REG_USER_MSG("Location", -1);
 	gmsgBotProgress   = REG_USER_MSG("BotProgress", -1);
 	gmsgBrass         = REG_USER_MSG("Brass", -1);
+	gmsgHudIcons      = REG_USER_MSG("HudIcons", 6);
 	gmsgFog           = REG_USER_MSG("Fog", 7);
 	gmsgShowTimer     = REG_USER_MSG("ShowTimer", 0);
 	gmsgHudTextArgs   = REG_USER_MSG("HudTextArgs", -1);
