@@ -500,31 +500,30 @@ void CMonsterNPC::AnimThink()
 	if (m_bSitting && !m_bMoving)
 		ApplySitOffset();
 
-	// speaking NPC turns to the player, then returns to the placed angle
+	// speaking NPC turns its HEAD (bone controller 0) to the player, like the original, then returns
 	bool turning = false;
-	if (!m_bMoving && !m_bFollow)
 	{
-		if (!m_bBaseYawSet)
-		{
-			m_flBaseYaw = pev->angles.y;
-			m_bBaseYawSet = true;
-		}
-
-		float want = m_flBaseYaw;
+		float want = 0;
 		if (gpGlobals->time < m_flFaceUntil)
 		{
 			CBaseEntity *pl = UTIL_PlayerByIndex(1);
 			if (pl)
 			{
 				Vector d = pl->pev->origin - pev->origin;
-				want = UTIL_VecToYaw(Vector(d.x, d.y, 0));
+				float yaw = UTIL_VecToYaw(Vector(d.x, d.y, 0));
+				want = UTIL_AngleDiff(yaw, pev->angles.y);
+				if (want > 60.0f) want = 60.0f;
+				if (want < -60.0f) want = -60.0f;
 			}
 		}
-
-		float cur = pev->angles.y;
-		if (fabs(UTIL_AngleDiff(want, cur)) > 1.0f)
+		if (fabs(want - m_flBaseYaw) > 0.5f)
 		{
-			pev->angles.y = UTIL_ApproachAngle(want, cur, 220.0f * 0.03f);
+			float step = 180.0f * 0.03f;
+			float dlt = want - m_flBaseYaw;
+			if (dlt > step) dlt = step;
+			if (dlt < -step) dlt = -step;
+			m_flBaseYaw += dlt;
+			SetBoneController(0, m_flBaseYaw);
 			turning = true;
 		}
 	}

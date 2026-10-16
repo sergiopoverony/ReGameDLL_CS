@@ -7180,6 +7180,10 @@ void CBasePlayer::HandleSignals()
 			OLD_CheckRescueZone(this);
 	}
 
+	// CZ: rescue zone indicator works regardless of gamerules (original sends it within 256 units of info_hostage_rescue)
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && IsAlive())
+		OLD_CheckRescueZone(this);
+
 	int state = m_signals.GetSignal();
 	int changed = m_signals.GetState() ^ state;
 
