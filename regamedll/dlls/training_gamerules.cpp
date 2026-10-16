@@ -196,6 +196,9 @@ void CHalfLifeTraining::PlayerSpawn(CBasePlayer *pPlayer)
 
 	while ((pWeaponEntity = UTIL_FindEntityByClassname(pWeaponEntity, "game_player_equip")))
 	{
+		if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && !FStringNull(pWeaponEntity->pev->targetname))
+			continue;
+
 		pWeaponEntity->Touch(pPlayer);
 	}
 

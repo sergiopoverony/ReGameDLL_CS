@@ -10631,6 +10631,10 @@ void EXT_FUNC CBasePlayer::__API_HOOK(OnSpawnEquip)(bool addDefault, bool equipG
 		CGamePlayerEquip *pWeaponEntity = nullptr;
 		while ((pWeaponEntity = UTIL_FindEntityByClassname(pWeaponEntity, "game_player_equip")))
 		{
+			// CZ: named equip entities are given only when triggered by the mission scripts
+			if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && !FStringNull(pWeaponEntity->pev->targetname))
+				continue;
+
 
 #ifdef REGAMEDLL_FIXES
 			if (pWeaponEntity->CanEquipOverTouch(this))
