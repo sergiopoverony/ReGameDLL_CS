@@ -554,7 +554,8 @@ void CGamePlayerEquip::KeyValue(KeyValueData *pkvd)
 
 				m_weaponNames[i] = ALLOC_STRING(tmp);
 				m_weaponCount[i] = Q_atoi(pkvd->szValue);
-				m_weaponCount[i] = Q_max(1, m_weaponCount[i]);
+				if (Q_strcmp(tmp, "nightvision")) // "nightvision" 0 means: take it away
+					m_weaponCount[i] = Q_max(1, m_weaponCount[i]);
 
 				pkvd->fHandled = TRUE;
 				break;
@@ -600,6 +601,28 @@ void CGamePlayerEquip::EquipPlayer(CBaseEntity *pEntity)
 
 		if (Cz_GiveTool(pPlayer, STRING(m_weaponNames[i])))
 			continue;
+
+		if (!Q_strcmp(STRING(m_weaponNames[i]), "nightvision"))
+		{
+			if (m_weaponCount[i] > 0)
+			{
+				if (!pPlayer->m_bHasNightVision)
+					EMIT_SOUND(ENT(pPlayer->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
+				pPlayer->m_bHasNightVision = true;
+			}
+			else
+			{
+				if (pPlayer->m_bNightVisionOn)
+				{
+					MESSAGE_BEGIN(MSG_ONE, gmsgNVGToggle, nullptr, pPlayer->pev);
+						WRITE_BYTE(0);
+					MESSAGE_END();
+					pPlayer->m_bNightVisionOn = false;
+				}
+				pPlayer->m_bHasNightVision = false;
+			}
+			continue;
+		}
 
 		for (int j = 0; j < m_weaponCount[i]; j++)
 		{

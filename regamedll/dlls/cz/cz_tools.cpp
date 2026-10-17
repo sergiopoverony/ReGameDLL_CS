@@ -14,7 +14,7 @@ enum
 	CZ_ICON_STEALTH = 1,
 	CZ_ICON_CAMERA  = 4,
 	CZ_ICON_FIBER   = 8,
-	CZ_ICON_ZIPLINE = 16,
+	CZ_ICON_RADIO   = 16,
 	CZ_ICON_RCBOMB  = 32,
 	CZ_ICON_TORCH   = 64,
 	CZ_ICON_DEFUSE  = 512,
@@ -99,7 +99,8 @@ static void Cz_SendTool()
 	if (!pl)
 		return;
 	int tool = 0;
-	if (g_czTools & CZ_ICON_RCBOMB) tool = 4;
+	if (g_czTools & CZ_ICON_RADIO) tool = 5;
+	else if (g_czTools & CZ_ICON_RCBOMB) tool = 4;
 	else if (g_czTools & CZ_ICON_TORCH) tool = 3;
 	else if (g_czTools & CZ_ICON_FIBER) tool = 2;
 	else if (g_czTools & CZ_ICON_CAMERA) tool = 1;
@@ -124,7 +125,7 @@ static void Cz_SendIcons(bool force = false)
 	// like the original: (icons shown, icons active = player is in the zone, tools owned);
 	// an owned tool icon is always shown, red outside its zone and green inside
 	int c = g_czTools;
-	int shown = a | (c & (CZ_ICON_CAMERA | CZ_ICON_FIBER | CZ_ICON_RCBOMB | CZ_ICON_TORCH));
+	int shown = a | (c & (CZ_ICON_CAMERA | CZ_ICON_FIBER | CZ_ICON_RCBOMB | CZ_ICON_TORCH | CZ_ICON_RADIO));
 	if (!force && a == g_czLastA && c == g_czLastC)
 		return;
 
@@ -448,7 +449,8 @@ public:
 				SET_VIEW(pl->edict(), pl->edict());
 				{
 					const char *vm = nullptr;
-					if (g_czTools & CZ_ICON_RCBOMB) vm = "models/v_rcontrolbomb.mdl";
+					if (g_czTools & CZ_ICON_RADIO) vm = "models/v_radio.mdl";
+					else if (g_czTools & CZ_ICON_RCBOMB) vm = "models/v_rcontrolbomb.mdl";
 					else if (g_czTools & CZ_ICON_TORCH) vm = "models/v_btorch.mdl";
 					else if (g_czTools & CZ_ICON_FIBER) vm = "models/v_focamera.mdl";
 					else if (g_czTools & CZ_ICON_CAMERA) vm = "models/v_camera.mdl";
@@ -681,6 +683,32 @@ void CCZRcCtl::CtlThink()
 // the bomb tool goes into the hands; everything else is taken away
 bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 {
+	if (name && !Q_strcmp(name, "weapon_radio"))
+	{
+		Cz_ToolsNewMap();
+		pl->RemoveAllItems(FALSE);
+		g_czTools = CZ_ICON_RADIO;
+		g_rcState = 0;
+		g_rcHold = 0;
+		Q_memset(g_tQ, 0, sizeof(g_tQ));
+		int len = 0;
+		byte *f = LOAD_FILE_FOR_ME("models/v_radio.mdl", &len);
+		if (f)
+		{
+			FREE_FILE(f);
+			pl->pev->viewmodel = MAKE_STRING("models/v_radio.mdl");
+			Cz_WeapAnim(pl, 2);
+			Cz_QueueAnim(0, 0, 1.0f);
+		}
+		else
+			ALERT(at_console, "tool: models/v_radio.mdl not found\n");
+		EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
+		ALERT(at_aiconsole, "tool given: weapon_radio\n");
+		Cz_SendIcons(true);
+		Cz_SendTool();
+		return true;
+	}
+
 	if (!name || Q_strcmp(name, "weapon_radiocontrolledbomb"))
 		return false;
 
@@ -1253,6 +1281,9 @@ void CCZUseTool::Spawn()
 			m_holdTime = m_defuseTime > 0 ? m_defuseTime : 5.0f;
 		}
 
+		if ((m_toolSet & CZ_ICON_RADIO) && !(m_toolSet & CZ_ICON_RCBOMB))
+			m_need = CZ_ICON_RADIO;
+
 		m_rcMode = ((m_toolSet & CZ_ICON_RCBOMB) || !FStringNull(m_rcBombTarget));
 		m_prevAtk = true;
 		if (m_rcMode)
@@ -1400,6 +1431,19 @@ void CCZUseTool::ToolThink()
 			m_nextUse = gpGlobals->time + 1.0f;
 			Complete(pl);
 		}
+		return;
+	}
+
+	if (m_need == CZ_ICON_RADIO)
+	{
+		// use the radio: one press of attack 1 inside the radio zone
+		if (!atkEdge)
+			return;
+		EMIT_SOUND(ENT(pl->pev), CHAN_WEAPON, "weapons/dryfire1.wav", VOL_NORM, ATTN_NORM);
+		Cz_WeapAnim((CBasePlayer *)pl, 1);
+		Cz_QueueAnim(0, 0, 1.5f);
+		m_nextUse = gpGlobals->time + 2.0f;
+		Complete(pl);
 		return;
 	}
 
