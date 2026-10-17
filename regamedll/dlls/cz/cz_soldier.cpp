@@ -7,7 +7,7 @@
 
 bool g_czMakerSpawn = false; // set by monstermaker while it creates a monster
 static cvar_t cz_cage_drop = { "cz_cage_drop", "100", 0, 100.0f, nullptr };
-static cvar_t cz_grenade_react = { "cz_grenade_react_radius", "140", 0, 140.0f, nullptr };
+static cvar_t cz_grenade_react = { "cz_grenade_react_radius", "250", 0, 250.0f, nullptr };
 static bool g_czCageCvar = false;
 
 

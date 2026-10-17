@@ -4423,6 +4423,10 @@ int CHalfLifeMultiplay::PlayerRelationship(CBasePlayer *pPlayer, CBaseEntity *pT
 
 BOOL CHalfLifeMultiplay::FAllowFlashlight()
 {
+	// CZ training maps: the shotgun flashlight must always work
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		return TRUE;
+
 	return flashlight.value ? TRUE : FALSE;
 }
 

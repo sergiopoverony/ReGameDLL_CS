@@ -6038,7 +6038,7 @@ void EXT_FUNC CBasePlayer::__API_HOOK(Spawn)()
 	}
 
 	MESSAGE_BEGIN(MSG_ONE, gmsgNVGToggle, nullptr, pev);
-		WRITE_BYTE(0);
+		WRITE_BYTE(m_bHasNightVision ? 2 : 3);
 	MESSAGE_END();
 
 	m_bNightVisionOn = false;
@@ -6829,6 +6829,13 @@ void EXT_FUNC CBasePlayer::__API_HOOK(ImpulseCommands)()
 		}
 		case 100:
 		{
+			// CZ maps: impulse 100 (F) toggles the night vision goggles when the player has them
+			if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && m_bHasNightVision)
+			{
+				CLIENT_COMMAND(edict(), "nightvision\n");
+				break;
+			}
+
 			// temporary flashlight for level designers
 			if (FlashlightIsOn())
 				FlashlightTurnOff();

@@ -609,16 +609,18 @@ void CGamePlayerEquip::EquipPlayer(CBaseEntity *pEntity)
 				if (!pPlayer->m_bHasNightVision)
 					EMIT_SOUND(ENT(pPlayer->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 				pPlayer->m_bHasNightVision = true;
+
+				// NVGToggle: 0 off, 1 on, 2 owned (off), 3 not owned
+				MESSAGE_BEGIN(MSG_ONE, gmsgNVGToggle, nullptr, pPlayer->pev);
+					WRITE_BYTE(pPlayer->m_bNightVisionOn ? 1 : 2);
+				MESSAGE_END();
 			}
 			else
 			{
-				if (pPlayer->m_bNightVisionOn)
-				{
-					MESSAGE_BEGIN(MSG_ONE, gmsgNVGToggle, nullptr, pPlayer->pev);
-						WRITE_BYTE(0);
-					MESSAGE_END();
-					pPlayer->m_bNightVisionOn = false;
-				}
+				MESSAGE_BEGIN(MSG_ONE, gmsgNVGToggle, nullptr, pPlayer->pev);
+					WRITE_BYTE(3);
+				MESSAGE_END();
+				pPlayer->m_bNightVisionOn = false;
 				pPlayer->m_bHasNightVision = false;
 			}
 			continue;

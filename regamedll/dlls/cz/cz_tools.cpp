@@ -125,6 +125,9 @@ static void Cz_SendIcons(bool force = false)
 	// like the original: (icons shown, icons active = player is in the zone, tools owned);
 	// an owned tool icon is always shown, red outside its zone and green inside
 	int c = g_czTools;
+	// a tool icon (even its zone) is not shown until the tool is taken
+	const int toolMask = CZ_ICON_CAMERA | CZ_ICON_FIBER | CZ_ICON_RCBOMB | CZ_ICON_TORCH | CZ_ICON_RADIO;
+	a &= ~toolMask | c;
 	int shown = a | (c & (CZ_ICON_CAMERA | CZ_ICON_FIBER | CZ_ICON_RCBOMB | CZ_ICON_TORCH | CZ_ICON_RADIO));
 	if (!force && a == g_czLastA && c == g_czLastC)
 		return;
@@ -697,7 +700,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 		{
 			FREE_FILE(f);
 			pl->pev->viewmodel = MAKE_STRING("models/v_radio.mdl");
-			Cz_WeapAnim(pl, 2);
+			Cz_WeapAnim(pl, 1); // draw
 			Cz_QueueAnim(0, 0, 1.0f);
 		}
 		else
@@ -1447,7 +1450,7 @@ void CCZUseTool::ToolThink()
 		if (!atkEdge)
 			return;
 		EMIT_SOUND(ENT(pl->pev), CHAN_WEAPON, "weapons/dryfire1.wav", VOL_NORM, ATTN_NORM);
-		Cz_WeapAnim((CBasePlayer *)pl, 1);
+		Cz_WeapAnim((CBasePlayer *)pl, 3); // v_radio: 0 idle, 1 draw, 2 holster, 3 use
 		Cz_QueueAnim(0, 0, 1.5f);
 		m_nextUse = gpGlobals->time + 2.0f;
 		Complete(pl);
