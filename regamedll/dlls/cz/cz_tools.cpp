@@ -23,6 +23,7 @@ enum
 static int g_czTools = 0;       // owned tools (CZ_ICON_* bits)
 static int g_czZoneCnt[16];     // how many zones of every icon the player is inside
 static int g_czLastA = -1, g_czLastC = -1;
+static bool g_czRadioDone = false; // radio already used: its HUD icon goes away
 static char g_czLastMap[64];
 
 static int  g_rcCharges = 5;     // radio controlled mines left
@@ -42,6 +43,7 @@ static void Cz_ToolsNewMap()
 		Q_strncpy(g_czLastMap, STRING(gpGlobals->mapname), sizeof(g_czLastMap) - 1);
 		g_czLastMap[sizeof(g_czLastMap) - 1] = '\0';
 		g_czTools = 0;
+		g_czRadioDone = false;
 		g_rcCharges = 5;
 		g_rcHold = 0;
 		g_fiberOn = false;
@@ -125,6 +127,8 @@ static void Cz_SendIcons(bool force = false)
 	// like the original: (icons shown, icons active = player is in the zone, tools owned);
 	// an owned tool icon is always shown, red outside its zone and green inside
 	int c = g_czTools;
+	if (g_czRadioDone)
+		c &= ~CZ_ICON_RADIO;
 	// a tool icon (even its zone) is not shown until the tool is taken
 	const int toolMask = CZ_ICON_CAMERA | CZ_ICON_FIBER | CZ_ICON_RCBOMB | CZ_ICON_TORCH | CZ_ICON_RADIO;
 	a &= ~toolMask | c;
@@ -691,6 +695,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 		Cz_ToolsNewMap();
 		pl->RemoveAllItems(FALSE);
 		g_czTools = CZ_ICON_RADIO;
+		g_czRadioDone = false;
 		g_rcState = 0;
 		g_rcHold = 0;
 		Q_memset(g_tQ, 0, sizeof(g_tQ));
@@ -1454,7 +1459,10 @@ void CCZUseTool::ToolThink()
 		Cz_QueueAnim(0, 0, 6.0f); // back to idle when the transmission ("Roger, on our way!") ends
 		ALERT(at_console, "radio: used in zone '%s', firing '%s'\n", STRING(pev->targetname), STRING(pev->target));
 		m_nextUse = gpGlobals->time + 2.0f;
+		g_czRadioDone = true;
 		Complete(pl);
+		g_czLastA = g_czLastC = -1;
+		Cz_SendIcons(true);
 		return;
 	}
 
