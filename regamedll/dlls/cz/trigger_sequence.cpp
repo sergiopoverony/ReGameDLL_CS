@@ -295,6 +295,9 @@ void CTriggerSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 		return;
 	}
 
+	ALERT(at_console, "trigger_sequence '%s': start \"%s\" (%d commands)%s\n", STRING(pev->targetname), m_entryName,
+		(int)m_entry->commands.size(), m_isDisabled ? " - DISABLED" : "");
+
 	if (m_isDisabled)
 		return;
 

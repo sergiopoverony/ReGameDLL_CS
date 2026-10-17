@@ -4807,6 +4807,13 @@ void EXT_FUNC CBasePlayer::__API_HOOK(PreThink)()
 #endif
 	}
 
+	// CZ training: the flashlight exists only on the shotgun, put the weapon away and the light goes out
+	if ((pev->effects & EF_DIMLIGHT) && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3)
+		&& !(m_pActiveItem && m_pActiveItem->m_iId == WEAPON_M3))
+	{
+		FlashlightTurnOff();
+	}
+
 	if (g_pGameRules && g_pGameRules->FAllowFlashlight())
 		m_iHideHUD &= ~HIDEHUD_FLASHLIGHT;
 	else
@@ -6658,6 +6665,10 @@ void CBasePlayer::FlashlightTurnOn()
 	if (!g_pGameRules->FAllowFlashlight())
 		return;
 
+	// CZ training: only the shotgun carries a flashlight
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && !(m_pActiveItem && m_pActiveItem->m_iId == WEAPON_M3))
+		return;
+
 	if (pev->weapons & (1 << WEAPON_SUIT))
 	{
 		EMIT_SOUND(ENT(pev), CHAN_ITEM, SOUND_FLASHLIGHT_ON, VOL_NORM, ATTN_NORM);
@@ -6835,6 +6846,10 @@ void EXT_FUNC CBasePlayer::__API_HOOK(ImpulseCommands)()
 				CLIENT_COMMAND(edict(), "nightvision\n");
 				break;
 			}
+
+			// CZ maps have no separate flashlight key: it is on the shotgun's secondary fire
+			if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+				break;
 
 			// temporary flashlight for level designers
 			if (FlashlightIsOn())

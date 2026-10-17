@@ -1451,7 +1451,8 @@ void CCZUseTool::ToolThink()
 			return;
 		EMIT_SOUND(ENT(pl->pev), CHAN_WEAPON, "weapons/dryfire1.wav", VOL_NORM, ATTN_NORM);
 		Cz_WeapAnim((CBasePlayer *)pl, 3); // v_radio: 0 idle, 1 draw, 2 holster, 3 use
-		Cz_QueueAnim(0, 0, 1.5f);
+		Cz_QueueAnim(0, 0, 6.0f); // back to idle when the transmission ("Roger, on our way!") ends
+		ALERT(at_console, "radio: used in zone '%s', firing '%s'\n", STRING(pev->targetname), STRING(pev->target));
 		m_nextUse = gpGlobals->time + 2.0f;
 		Complete(pl);
 		return;
