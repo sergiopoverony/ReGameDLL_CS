@@ -1282,7 +1282,14 @@ void CCZUseTool::Spawn()
 		}
 
 		if ((m_toolSet & CZ_ICON_RADIO) && !(m_toolSet & CZ_ICON_RCBOMB))
+		{
 			m_need = CZ_ICON_RADIO;
+			// the radio is given at run time by game_player_equip: its view model must be loaded with the map
+			PRECACHE_MODEL("models/v_radio.mdl");
+			PRECACHE_MODEL("models/w_radio.mdl");
+			PRECACHE_SOUND("items/gunpickup2.wav");
+			PRECACHE_SOUND("weapons/dryfire1.wav");
+		}
 
 		m_rcMode = ((m_toolSet & CZ_ICON_RCBOMB) || !FStringNull(m_rcBombTarget));
 		m_prevAtk = true;
@@ -1482,11 +1489,28 @@ void CCZUseTool::ToolThink()
 		bool burn = (pl->pev->button & IN_ATTACK) != 0;
 		if (burn && Cz_MapHasLocks() && !Cz_AimedLock(pl))
 			burn = false;
+		static bool s_rooted = false;
 		if (!burn)
+		{
+			if (s_rooted)
+			{
+				s_rooted = false;
+				pl->ResetMaxSpeed();
+			}
 			return;
+		}
+		// while the torch works on the lock the player cannot walk away
+		s_rooted = true;
+		pl->pev->maxspeed = 1.0f;
+		pl->pev->velocity.x = pl->pev->velocity.y = 0;
 		m_acc += 0.05f;
 		if (m_acc >= 1.5f)
 		{
+			if (s_rooted)
+			{
+				s_rooted = false;
+				pl->ResetMaxSpeed();
+			}
 			m_acc = 0;
 			m_nextUse = gpGlobals->time + 1.5f;
 			Complete(pl);
