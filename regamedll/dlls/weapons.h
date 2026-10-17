@@ -1356,6 +1356,7 @@ public:
 	virtual int iItemSlot() { return PRIMARY_WEAPON_SLOT; }
 	virtual BOOL PlayEmptySound();
 	virtual void PrimaryAttack();
+	virtual void SecondaryAttack();
 	virtual void Reload();
 	virtual void WeaponIdle();
 	virtual BOOL UseDecrement()

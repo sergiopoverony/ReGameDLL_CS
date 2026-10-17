@@ -184,6 +184,21 @@ void CM3::PrimaryAttack()
 	m_pPlayer->m_flEjectBrass = gpGlobals->time + 0.45f;
 }
 
+// CZ training: the shotgun has a flashlight on the secondary fire
+void CM3::SecondaryAttack()
+{
+	if (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		return;
+
+	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.4f;
+
+	m_pPlayer->pev->weapons |= (1 << WEAPON_SUIT);
+	if (m_pPlayer->pev->effects & EF_DIMLIGHT)
+		m_pPlayer->FlashlightTurnOff();
+	else
+		m_pPlayer->FlashlightTurnOn();
+}
+
 void CM3::Reload()
 {
 	if (!DefaultShotgunReload(M3_RELOAD, M3_START_RELOAD, 0.45f, 0.55f))
