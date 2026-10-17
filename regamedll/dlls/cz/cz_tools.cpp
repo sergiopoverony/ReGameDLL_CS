@@ -1479,6 +1479,12 @@ void CCZUseTool::ToolThink()
 			Cz_WeapAnim((CBasePlayer *)pl, 1);
 			Cz_QueueAnim(0, 0, 1.8f);
 			m_nextUse = gpGlobals->time + 2.0f;
+			// the picture is "transmitted" first: the targets (Picture received!) fire after a pause
+			float savedDelay = m_flDelay;
+			m_flDelay = 2.5f;
+			Complete(pl);
+			m_flDelay = savedDelay;
+			return;
 		}
 		else
 			m_nextUse = gpGlobals->time + 1.0f;
