@@ -914,6 +914,10 @@ bool CBasePlayerWeapon::HasSecondaryAttack()
 		return true;
 	}
 
+	// CZ training: shotgun alt-fire toggles the flashlight
+	if (m_iId == WEAPON_M3 && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		return true;
+
 	switch (m_iId)
 	{
 	case WEAPON_AK47:

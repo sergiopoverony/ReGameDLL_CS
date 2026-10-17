@@ -1318,14 +1318,14 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 {
 	ALERT(at_aiconsole, "trigger_usetool '%s' (%s) used\n", STRING(pev->targetname), STRING(m_toolName));
 
-	if (m_defuseTime > 0 && !FStringNull(m_toolTarget))
+	if (m_defuseTime > 0)
 	{
-		// remove the bomb that was defused
-		CBaseEntity *pBomb = nullptr;
-		while ((pBomb = UTIL_FindEntityByTargetname(pBomb, STRING(m_toolTarget))))
+		// the bomb model stays; only the zone and its HUD icon go away
+		m_done = true;
+		if (m_inside)
 		{
-			if (pBomb != this)
-				UTIL_Remove(pBomb);
+			Cz_ZoneLeave(m_iconBits);
+			m_inside = false;
 		}
 	}
 
