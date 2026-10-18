@@ -381,6 +381,7 @@ void CCZTorchFx::FxThink()
 // radio controlled bomb: planted in a marked zone with the left button, detonated with the next press
 // ---------------------------------------------------------------------------
 static EHANDLE g_hRcPlanted;
+static void Cz_RcFinish(CBaseEntity *zone);
 static EHANDLE g_hRcZone; // the usetool zone where the plant was started
 static float g_flRcPlantTime = 0;
 // viewmodel sequences of v_rcontrolbomb (taken from the original demo): 0 idle, 2 draw, 6 plant press, 3 bomb placed,
@@ -610,6 +611,7 @@ void CCZRcCtl::CtlThink()
 			Cz_QueueAnim(0, 1, 1.33f);
 			g_rcBusy = now + 1.33f;
 			g_rcState = 2;
+			Cz_RcFinish(g_hRcZone);
 			Cz_SendTool();
 			ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f (left %d)\n", g_rcPos.x, g_rcPos.y, g_rcPos.z, g_rcCharges);
 		}
@@ -1169,6 +1171,7 @@ public:
 	virtual void Spawn();
 	void EXPORT ToolThink();
 	void Complete(CBasePlayer *pl);
+	void RcFinish();
 
 	string_t m_toolName;
 	string_t m_toolTarget;
@@ -1366,6 +1369,9 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 		}
 	}
 
+	if (m_rcMode)
+		return; // the guide model and the zone go away only when the mine is really planted (Cz_RcFinish)
+
 	if (!FStringNull(m_rcBombTarget))
 	{
 		CBaseEntity *pBomb = nullptr;
@@ -1403,6 +1409,33 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 
 	SUB_UseTargets(pl, USE_TOGGLE, 0);
 
+	if (pev->spawnflags & 1)
+	{
+		m_done = true;
+		if (m_inside)
+		{
+			Cz_ZoneLeave(m_iconBits);
+			m_inside = false;
+		}
+	}
+}
+
+static void Cz_RcFinish(CBaseEntity *zone)
+{
+	CCZUseTool *z = (CCZUseTool *)zone;
+	if (!z)
+		return;
+	z->RcFinish();
+}
+
+void CCZUseTool::RcFinish()
+{
+	if (!FStringNull(m_rcBombTarget))
+	{
+		CBaseEntity *pBomb = nullptr;
+		while ((pBomb = UTIL_FindEntityByTargetname(pBomb, STRING(m_rcBombTarget))))
+			UTIL_Remove(pBomb);
+	}
 	if (pev->spawnflags & 1)
 	{
 		m_done = true;
