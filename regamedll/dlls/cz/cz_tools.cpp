@@ -381,6 +381,7 @@ void CCZTorchFx::FxThink()
 // radio controlled bomb: planted in a marked zone with the left button, detonated with the next press
 // ---------------------------------------------------------------------------
 static EHANDLE g_hRcPlanted;
+static EHANDLE g_hRcZone; // the usetool zone where the plant was started
 static float g_flRcPlantTime = 0;
 // viewmodel sequences of v_rcontrolbomb (taken from the original demo): 0 idle, 2 draw, 6 plant press, 3 bomb placed,
 // 1 after plant, 7 detonate press, 5 explosion, 2 draw again
@@ -584,6 +585,16 @@ void CCZRcCtl::CtlThink()
 
 	if (g_rcState == 1)
 	{
+		// stepping out of the install zone while the plant animation runs cancels the plant (no mine is spent)
+		CBaseEntity *zone = g_hRcZone;
+		if (zone && !Cz_Overlaps(zone, pl))
+		{
+			g_rcState = 0;
+			g_hRcZone = nullptr;
+			Cz_RcAnim(pl, 0);
+			ALERT(at_aiconsole, "rc bomb: plant cancelled, player left the zone\n");
+			return;
+		}
 		// bomb appears 1.07 s after the press
 		if (now >= g_rcDue)
 		{
@@ -1350,6 +1361,7 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 			g_rcAng = ang;
 			g_rcDue = gpGlobals->time + 1.07f;
 			g_rcState = 1;
+			g_hRcZone = this;
 			Cz_RcAnim(pl, 6);
 		}
 	}
