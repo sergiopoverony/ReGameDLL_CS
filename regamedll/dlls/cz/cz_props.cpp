@@ -45,7 +45,7 @@ TYPEDESCRIPTION CItemGeneric::m_SaveData[] =
 	DEFINE_FIELD(CItemGeneric, m_removeOnUse, FIELD_INTEGER),
 };
 
-static cvar_t cz_bomb_fwd = { "cz_bomb_fwd", "0", 0, 0.0f, nullptr };
+static cvar_t cz_bomb_fwd = { "cz_bomb_fwd", "2", 0, 2.0f, nullptr };
 static cvar_t cz_bomb_right = { "cz_bomb_right", "0", 0, 0.0f, nullptr };
 static cvar_t cz_bomb_up = { "cz_bomb_up", "0", 0, 0.0f, nullptr };
 static bool g_czBombCvars = false;
