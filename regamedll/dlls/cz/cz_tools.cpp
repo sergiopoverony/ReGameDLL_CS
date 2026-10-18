@@ -34,6 +34,7 @@ struct czq_t { int anim; float t; };
 static czq_t g_tQ[2];            // delayed viewmodel animations
 static float g_czToolSent = -1;
 static bool g_czSaveFix = false;
+static float g_rcUnstuck = 0;    // after a blast: push the player out of solids until then
 static float g_rcBusy = 0;       // switching mine/detonator: buttons ignored until then
 
 static void Cz_ToolsNewMap()
@@ -584,6 +585,40 @@ void CCZRcCtl::CtlThink()
 	m_prev2 = atk2;
 	float now = gpGlobals->time;
 
+	if (now < g_rcUnstuck)
+	{
+		int hull = (pl->pev->flags & FL_DUCKING) ? head_hull : human_hull;
+		TraceResult tr;
+		UTIL_TraceHull(pl->pev->origin, pl->pev->origin, ignore_monsters, hull, pl->edict(), &tr);
+		TraceResult tr2;
+		UTIL_TraceHull(pl->pev->origin, pl->pev->origin, dont_ignore_monsters, hull, pl->edict(), &tr2);
+		if (tr.fStartSolid || tr2.fStartSolid)
+		{
+			static const float rings[] = { 16, 32, 48, 64, 96, 128 };
+			bool done = false;
+			for (int r = 0; r < 6 && !done; r++)
+			{
+				for (int a = 0; a < 16 && !done; a++)
+				{
+					for (int dz = 0; dz <= 36 && !done; dz += 18)
+					{
+						float ang = a * (M_PI * 2 / 16);
+						Vector np = pl->pev->origin + Vector(cos(ang) * rings[r], sin(ang) * rings[r], (float)dz);
+						TraceResult t3;
+						UTIL_TraceHull(np, np, dont_ignore_monsters, hull, pl->edict(), &t3);
+						if (!t3.fStartSolid && !t3.fAllSolid)
+						{
+							UTIL_SetOrigin(pl->pev, np);
+							pl->pev->velocity = Vector(0, 0, 0);
+							ALERT(at_aiconsole, "rc bomb: player pushed out of solid\n");
+							done = true;
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if (g_rcState == 1)
 	{
 		// stepping out of the install zone while the plant animation runs cancels the plant (no mine is spent)
@@ -636,6 +671,7 @@ void CCZRcCtl::CtlThink()
 			WRITE_BYTE(0);
 		MESSAGE_END();
 		UTIL_ScreenShake(pos, 8.0f, 40.0f, 2.0f, 700.0f);
+		g_rcUnstuck = now + 6.0f;
 		if (bomb)
 			EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
 		ALERT(at_aiconsole, "rc bomb detonated at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
