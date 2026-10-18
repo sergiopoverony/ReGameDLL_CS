@@ -4251,6 +4251,10 @@ int CHalfLifeMultiplay::WeaponShouldRespawn(CBasePlayerItem *pWeapon)
 		return GR_WEAPON_RESPAWN_NO;
 	}
 
+	// CZ training: weapons lying on tables do not respawn
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		return GR_WEAPON_RESPAWN_NO;
+
 	return GR_WEAPON_RESPAWN_YES;
 }
 
