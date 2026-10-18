@@ -31,6 +31,7 @@ public:
 	void ApplySequence(const char *name);
 	void EXPORT HideIfAppearTarget();
 	void EXPORT AnimThink();
+	void EXPORT BombSprThink();
 	bool m_bAnimated = false;
 
 	string_t m_sequenceName;
@@ -43,6 +44,11 @@ TYPEDESCRIPTION CItemGeneric::m_SaveData[] =
 	DEFINE_FIELD(CItemGeneric, m_sequenceName, FIELD_STRING),
 	DEFINE_FIELD(CItemGeneric, m_removeOnUse, FIELD_INTEGER),
 };
+
+static cvar_t cz_bomb_fwd = { "cz_bomb_fwd", "0", 0, 0.0f, nullptr };
+static cvar_t cz_bomb_right = { "cz_bomb_right", "0", 0, 0.0f, nullptr };
+static cvar_t cz_bomb_up = { "cz_bomb_up", "0", 0, 0.0f, nullptr };
+static bool g_czBombCvars = false;
 
 LINK_ENTITY_TO_CLASS(item_generic, CItemGeneric, CCSItemGeneric)
 IMPLEMENT_SAVERESTORE(CItemGeneric, CBaseAnimating)
@@ -124,6 +130,21 @@ void CItemGeneric::Spawn()
 		pev->nextthink = gpGlobals->time + 0.1f;
 	}
 
+	// the defuse bomb (train03): its light sprites are nudged with cz_bomb_fwd/right/up (live tuning)
+	if (!FStringNull(pev->targetname) && FStrEq(STRING(pev->targetname), "bomb") && Q_strstr(STRING(pev->model), "w_c4"))
+	{
+		if (!g_czBombCvars)
+		{
+			g_czBombCvars = true;
+			CVAR_REGISTER(&cz_bomb_fwd);
+			CVAR_REGISTER(&cz_bomb_right);
+			CVAR_REGISTER(&cz_bomb_up);
+		}
+		SetThink(&CItemGeneric::BombSprThink);
+		pev->nextthink = gpGlobals->time + 0.5f;
+		return;
+	}
+
 	// display items that a map shows later with an env_render ("appear") start hidden
 	if (!FStringNull(pev->targetname))
 	{
@@ -143,6 +164,31 @@ void CItemGeneric::AnimThink()
 	}
 
 	pev->nextthink = gpGlobals->time + 0.1f;
+}
+
+void CItemGeneric::BombSprThink()
+{
+	Vector f, r, u;
+	UTIL_MakeVectorsPrivate(pev->angles, f, r, u);
+	Vector off = f * cz_bomb_fwd.value + r * cz_bomb_right.value + u * cz_bomb_up.value;
+
+	static const char *names[2] = { "bomb_on", "bomb_off" };
+	for (int i = 0; i < 2; i++)
+	{
+		CBaseEntity *e = nullptr;
+		while ((e = UTIL_FindEntityByString(e, "targetname", names[i])) != nullptr)
+		{
+			if (FStrEq(STRING(e->pev->classname), "env_sprite") == FALSE)
+				continue;
+			if (e->pev->iuser3 != 7771)
+			{
+				e->pev->iuser3 = 7771;
+				e->pev->vuser1 = e->pev->origin; // original map position
+			}
+			UTIL_SetOrigin(e->pev, e->pev->vuser1 + off);
+		}
+	}
+	pev->nextthink = gpGlobals->time + 0.5f;
 }
 
 void CItemGeneric::HideIfAppearTarget()
