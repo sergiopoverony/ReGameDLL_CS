@@ -569,6 +569,13 @@ void CBreakable::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE use
 
 void CBreakable::TraceAttack(entvars_t *pevAttacker, float flDamage, Vector vecDir, TraceResult *ptr, int bitsDamageType)
 {
+	// CZ:DS diagnostics (breakables after load)
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+	{
+		ALERT(at_console, "breakable hit: %s model=%s dmg=%.1f hp=%.1f takedamage=%d mat=%d solid=%d dead=%d\n",
+			STRING(pev->targetname), STRING(pev->model), flDamage, pev->health, (int)pev->takedamage, (int)m_Material, pev->solid, pev->deadflag);
+	}
+
 	// random spark if this is a 'computer' object
 	if (RANDOM_LONG(0, 1))
 	{
