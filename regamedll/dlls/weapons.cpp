@@ -480,6 +480,47 @@ int CBasePlayerWeapon::Restore(CRestore &restore)
 		Q_memset(&info, 0, sizeof(info));
 		if (GetItemInfo(&info)) {
 			CSPlayerItem()->SetItemInfo(&info);
+
+			// m_flBaseDamage (and the silenced/burst variants) are also set only in Spawn():
+			// after a load every bullet did 0 damage
+			float dmg = 0.0f;
+			switch (info.iId)
+			{
+			case WEAPON_AK47: dmg = AK47_DAMAGE; break;
+			case WEAPON_AUG: dmg = AUG_DAMAGE; break;
+			case WEAPON_AWP: dmg = AWP_DAMAGE; break;
+			case WEAPON_DEAGLE: dmg = DEAGLE_DAMAGE; break;
+			case WEAPON_ELITE: dmg = ELITE_DAMAGE; break;
+			case WEAPON_FAMAS: dmg = FAMAS_DAMAGE; break;
+			case WEAPON_FIVESEVEN: dmg = FIVESEVEN_DAMAGE; break;
+			case WEAPON_G3SG1: dmg = G3SG1_DAMAGE; break;
+			case WEAPON_GALIL: dmg = GALIL_DAMAGE; break;
+			case WEAPON_GLOCK18: dmg = GLOCK18_DAMAGE; break;
+			case WEAPON_M249: dmg = M249_DAMAGE; break;
+			case WEAPON_M3: dmg = M3_DAMAGE; break;
+			case WEAPON_M4A1: dmg = M4A1_DAMAGE; break;
+			case WEAPON_MAC10: dmg = MAC10_DAMAGE; break;
+			case WEAPON_MP5N: dmg = MP5N_DAMAGE; break;
+			case WEAPON_P228: dmg = P228_DAMAGE; break;
+			case WEAPON_P90: dmg = P90_DAMAGE; break;
+			case WEAPON_SCOUT: dmg = SCOUT_DAMAGE; break;
+			case WEAPON_SG550: dmg = SG550_DAMAGE; break;
+			case WEAPON_SG552: dmg = SG552_DAMAGE; break;
+			case WEAPON_TMP: dmg = TMP_DAMAGE; break;
+			case WEAPON_UMP45: dmg = UMP45_DAMAGE; break;
+			case WEAPON_USP: dmg = USP_DAMAGE; break;
+			case WEAPON_XM1014: dmg = XM1014_DAMAGE; break;
+			default: break;
+			}
+			if (dmg > 0.0f)
+				CSPlayerWeapon()->m_flBaseDamage = dmg;
+
+			if (info.iId == WEAPON_USP)
+				static_cast<CUSP *>(this)->m_flBaseDamageSil = USP_DAMAGE_SIL;
+			else if (info.iId == WEAPON_M4A1)
+				static_cast<CM4A1 *>(this)->m_flBaseDamageSil = M4A1_DAMAGE_SIL;
+			else if (info.iId == WEAPON_FAMAS)
+				static_cast<CFamas *>(this)->m_flBaseDamageBurst = FAMAS_DAMAGE_BURST;
 		}
 	}
 #endif

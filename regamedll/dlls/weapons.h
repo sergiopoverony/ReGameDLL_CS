@@ -587,6 +587,7 @@ private:
 	unsigned short m_usFireUSP;
 
 #ifdef REGAMEDLL_API
+public:
 	float m_flBaseDamageSil;
 #endif
 };
@@ -1440,6 +1441,7 @@ private:
 	unsigned short m_usFireM4A1;
 
 #ifdef REGAMEDLL_API
+public:
 	float m_flBaseDamageSil;
 #endif
 };
@@ -2132,6 +2134,7 @@ public:
 	int iShellOn;
 
 #ifdef REGAMEDLL_API
+public:
 	float m_flBaseDamageBurst;
 #endif
 };
