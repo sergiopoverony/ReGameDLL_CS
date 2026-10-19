@@ -252,10 +252,13 @@ class CGamePlayerEquip: public CRulePointEntity
 {
 public:
 	virtual void KeyValue(KeyValueData *pkvd);
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
 	virtual void Touch(CBaseEntity *pOther);
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
 
 public:
+	static TYPEDESCRIPTION m_SaveData[];
 	bool UseOnly() const { return (pev->spawnflags & SF_PLAYEREQUIP_USEONLY) == SF_PLAYEREQUIP_USEONLY; }
 	bool RemoveWeapons() const { return (pev->spawnflags & SF_PLAYEREQUIP_REMOVEWEAPONS) == SF_PLAYEREQUIP_REMOVEWEAPONS; }
 	

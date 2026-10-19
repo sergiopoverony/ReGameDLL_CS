@@ -245,10 +245,13 @@ class CTriggerCDAudio: public CBaseTrigger
 public:
 	virtual void Spawn();
 	virtual void KeyValue(KeyValueData *pkvd); // CZ:DS: "trackname" (music file instead of a CD track)
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
 	virtual void Touch(CBaseEntity *pOther);
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
 
 public:
+	static TYPEDESCRIPTION m_SaveData[];
 	void PlayTrack(edict_t *pEdict);
 	void EXPORT DoorWatch(); // CZ:DS: music stops when the player walks through the door that shares our targetname
 

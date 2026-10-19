@@ -8896,6 +8896,15 @@ void Cz_StripTools();
 
 LINK_ENTITY_TO_CLASS(player_weaponstrip, CStripWeapons, CCSStripWeapons)
 
+#ifdef REGAMEDLL_ADD
+TYPEDESCRIPTION CStripWeapons::m_SaveData[] =
+{
+	DEFINE_FIELD(CStripWeapons, m_bitsIgnoreSlots, FIELD_INTEGER),
+	DEFINE_FIELD(CStripWeapons, m_iszSpecialItem, FIELD_STRING),
+};
+IMPLEMENT_SAVERESTORE(CStripWeapons, CPointEntity)
+#endif
+
 void CStripWeapons::KeyValue(KeyValueData *pkvd)
 {
 #ifdef REGAMEDLL_ADD

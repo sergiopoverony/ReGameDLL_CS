@@ -305,9 +305,12 @@ class CStripWeapons: public CPointEntity {
 public:
 	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
 	virtual void KeyValue(KeyValueData *pkvd);
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
 
 #ifdef REGAMEDLL_ADD
 public:
+	static TYPEDESCRIPTION m_SaveData[];
 	int m_bitsIgnoreSlots;
 	int m_iszSpecialItem;
 #endif

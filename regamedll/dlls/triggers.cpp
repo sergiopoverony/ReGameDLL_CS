@@ -560,7 +560,14 @@ void CTriggerMonsterJump::Touch(CBaseEntity *pOther)
 	pev->nextthink = gpGlobals->time;
 }
 
+TYPEDESCRIPTION CTriggerCDAudio::m_SaveData[] =
+{
+	DEFINE_FIELD(CTriggerCDAudio, m_iszTrackName, FIELD_STRING),
+	DEFINE_FIELD(CTriggerCDAudio, m_hWatchDoor, FIELD_EHANDLE),
+};
+
 LINK_ENTITY_TO_CLASS(trigger_cdaudio, CTriggerCDAudio, CCSTriggerCDAudio)
+IMPLEMENT_SAVERESTORE(CTriggerCDAudio, CBaseTrigger)
 
 // Changes tracks or stops CD when player touches
 // HACK: overloaded HEALTH to avoid adding new field
