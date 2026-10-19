@@ -472,6 +472,18 @@ int CBasePlayerWeapon::Restore(CRestore &restore)
 	if (!restore.ReadFields("CBasePlayerWeapon", this, m_SaveData, ARRAYSIZE(m_SaveData)))
 		return 0;
 
+#ifdef REGAMEDLL_API
+	// per-instance ItemInfo (iMaxClip, ammo names, flags) is filled in Spawn() only, and restore calls
+	// Precache() instead: without this iMaxClip() == 0 after a load and reload wipes the clip
+	{
+		ItemInfo info;
+		Q_memset(&info, 0, sizeof(info));
+		if (GetItemInfo(&info)) {
+			CSPlayerItem()->SetItemInfo(&info);
+		}
+	}
+#endif
+
 	// transient state must not survive a load (player's m_flNextAttack is not saved)
 	m_fInReload = FALSE;
 	m_fInSpecialReload = 0;
