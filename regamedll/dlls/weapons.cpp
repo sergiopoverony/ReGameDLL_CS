@@ -446,6 +446,16 @@ TYPEDESCRIPTION CBasePlayerWeapon::m_SaveData[] =
 	DEFINE_FIELD(CBasePlayerWeapon, m_iSecondaryAmmoType, FIELD_INTEGER),
 	DEFINE_FIELD(CBasePlayerWeapon, m_iClip, FIELD_INTEGER),
 	DEFINE_FIELD(CBasePlayerWeapon, m_iDefaultAmmo, FIELD_INTEGER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_fInReload, FIELD_INTEGER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_fInSpecialReload, FIELD_INTEGER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_flNextReload, FIELD_TIME),
+	DEFINE_FIELD(CBasePlayerWeapon, m_iWeaponState, FIELD_INTEGER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_flAccuracy, FIELD_FLOAT),
+	DEFINE_FIELD(CBasePlayerWeapon, m_iShotsFired, FIELD_INTEGER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_bDelayFire, FIELD_CHARACTER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_bSecondarySilencerOn, FIELD_CHARACTER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_flLastFire, FIELD_TIME),
+	DEFINE_FIELD(CBasePlayerWeapon, m_flDecreaseShotsFired, FIELD_TIME),
 };
 
 IMPLEMENT_SAVERESTORE(CBasePlayerWeapon, CBasePlayerItem)
