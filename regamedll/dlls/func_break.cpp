@@ -84,6 +84,7 @@ TYPEDESCRIPTION CBreakable::m_SaveData[] =
 	DEFINE_FIELD(CBreakable, m_angle, FIELD_FLOAT),
 	DEFINE_FIELD(CBreakable, m_iszGibModel, FIELD_STRING),
 	DEFINE_FIELD(CBreakable, m_iszSpawnObject, FIELD_STRING),
+	DEFINE_FIELD(CBreakable, m_flHealth, FIELD_FLOAT),
 };
 
 LINK_ENTITY_TO_CLASS(func_breakable, CBreakable, CCSBreakable)

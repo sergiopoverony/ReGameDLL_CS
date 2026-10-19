@@ -458,7 +458,35 @@ TYPEDESCRIPTION CBasePlayerWeapon::m_SaveData[] =
 	DEFINE_FIELD(CBasePlayerWeapon, m_flDecreaseShotsFired, FIELD_TIME),
 };
 
-IMPLEMENT_SAVERESTORE(CBasePlayerWeapon, CBasePlayerItem)
+int CBasePlayerWeapon::Save(CSave &save)
+{
+	if (!CBasePlayerItem::Save(save))
+		return 0;
+	return save.WriteFields("CBasePlayerWeapon", this, m_SaveData, ARRAYSIZE(m_SaveData));
+}
+
+int CBasePlayerWeapon::Restore(CRestore &restore)
+{
+	if (!CBasePlayerItem::Restore(restore))
+		return 0;
+	if (!restore.ReadFields("CBasePlayerWeapon", this, m_SaveData, ARRAYSIZE(m_SaveData)))
+		return 0;
+
+	// transient state must not survive a load (player's m_flNextAttack is not saved)
+	m_fInReload = FALSE;
+	m_fInSpecialReload = 0;
+	m_flNextReload = 0;
+	m_flGlock18Shoot = 0;
+	m_flFamasShoot = 0;
+	if (UseDecrement())
+	{
+		// decrement-style timers are small relative values; time-base shift on load can corrupt them
+		if (m_flNextPrimaryAttack > 0.0f || m_flNextPrimaryAttack < -1.1f) m_flNextPrimaryAttack = -0.001f;
+		if (m_flNextSecondaryAttack > 0.0f || m_flNextSecondaryAttack < -1.1f) m_flNextSecondaryAttack = -0.001f;
+		if (m_flTimeWeaponIdle > 0.0f || m_flTimeWeaponIdle < -1.1f) m_flTimeWeaponIdle = -0.001f;
+	}
+	return 1;
+}
 
 void CBasePlayerItem::SetObjectCollisionBox()
 {
