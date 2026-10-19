@@ -424,9 +424,41 @@ void CSave::WritePositionVector(const char *pname, const float *value, int count
 	}
 }
 
+#ifdef _WIN32
+// CZDS: Xash on Windows resolves Think/Touch/Use pointers through the DLL export table
+// (limit 4096 exports). Anything not exported is saved as an offset inside our own module.
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
+static const char *Cz_OffsetNameForFunction(void *function, char *buf, size_t size)
+{
+	byte *base = (byte *)&__ImageBase;
+	IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + __ImageBase.e_lfanew);
+	byte *p = (byte *)function;
+
+	if (!p || p < base || p >= base + nt->OptionalHeader.SizeOfImage)
+		return nullptr;
+
+	snprintf(buf, size, "czofs:%08X", (unsigned)(p - base));
+	return buf;
+}
+
+static void *Cz_FunctionFromOffsetName(const char *name)
+{
+	if (strncmp(name, "czofs:", 6))
+		return nullptr;
+
+	return (byte *)&__ImageBase + (unsigned)strtoul(name + 6, nullptr, 16);
+}
+#endif
+
 void CSave::WriteFunction(const char *pname, void **data, int count)
 {
 	const char *functionName = NAME_FOR_FUNCTION(*data);
+#ifdef _WIN32
+	char czName[32];
+	if (!functionName)
+		functionName = Cz_OffsetNameForFunction(*data, czName, sizeof(czName));
+#endif
 
 	if (functionName)
 		BufferField(pname, Q_strlen(functionName) + 1, functionName);
@@ -751,7 +783,14 @@ int CRestore::ReadField(void *pBaseData, TYPEDESCRIPTION *pFields, int fieldCoun
 						if (!Q_strlen((char *)pInputData))
 							*((int *)pOutputData) = 0;
 						else
+						{
+#ifdef _WIN32
+							void *czFn = Cz_FunctionFromOffsetName((char *)pInputData);
+							*((int *)pOutputData) = czFn ? (int)(size_t)czFn : (int)(size_t)FUNCTION_FROM_NAME((char *)pInputData);
+#else
 							*((int *)pOutputData) = FUNCTION_FROM_NAME((char *)pInputData);
+#endif
+						}
 
 						break;
 					}
