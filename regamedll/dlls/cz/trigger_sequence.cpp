@@ -323,6 +323,9 @@ void CTriggerSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TY
 
 void CTriggerSequence::Think()
 {
+	if (!m_entry && m_nextIndex >= 0)
+		Resolve(); // m_entry is not saved: re-resolve after a load
+
 	if (!m_entry || m_nextIndex < 0)
 	{
 		StopSequence();
