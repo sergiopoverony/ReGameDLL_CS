@@ -48,6 +48,8 @@ static void Cz_ToolsNewMap()
 		g_rcCharges = 5;
 		g_rcHold = 0;
 		g_fiberOn = false;
+		g_fiberExitT = -10; // level time restarts on a new map: a stale value blocked tools for minutes
+		g_rcBusy = 0;
 		Q_memset(g_czZoneCnt, 0, sizeof(g_czZoneCnt));
 		g_czLastA = g_czLastC = -1;
 	}
@@ -1513,7 +1515,7 @@ void CCZUseTool::ToolThink()
 	if (m_need && !(g_czTools & m_need))
 		return;
 
-	if (g_fiberOn || gpGlobals->time < g_fiberExitT + 0.6f)
+	if (g_fiberOn || gpGlobals->time >= g_fiberExitT && gpGlobals->time < g_fiberExitT + 0.6f)
 		return;
 
 	if (gpGlobals->time < m_nextUse)
