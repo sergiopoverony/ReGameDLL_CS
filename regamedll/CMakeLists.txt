@@ -380,7 +380,13 @@ if (MSVC)
 	# CZ:DS: Xash3D resolves think/touch/use function pointers of the save files through the DLL export table
 	# (COM_NameForFunction/COM_FunctionFromName), so every function must be exported or save/load breaks
 	# ("Invalid function pointer in entity"). GiveFnptrsToDll is exported with dllexport in h_export.cpp.
-	set_target_properties(regamedll PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+	# Xash limits a DLL to 4096 exports: the first CI pass exports everything, scripts/gen_exports.py then
+	# builds a .def with only the think/touch/use symbols and the second pass relinks with CZ_EXPORT_DEF.
+	if (CZ_EXPORT_DEF)
+		target_sources(regamedll PRIVATE ${CZ_EXPORT_DEF})
+	else()
+		set_target_properties(regamedll PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+	endif()
 endif()
 
 target_include_directories(regamedll PRIVATE
