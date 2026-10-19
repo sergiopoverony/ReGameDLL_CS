@@ -450,6 +450,7 @@ TYPEDESCRIPTION CBasePlayerWeapon::m_SaveData[] =
 	DEFINE_FIELD(CBasePlayerWeapon, m_fInSpecialReload, FIELD_INTEGER),
 	DEFINE_FIELD(CBasePlayerWeapon, m_flNextReload, FIELD_TIME),
 	DEFINE_FIELD(CBasePlayerWeapon, m_iWeaponState, FIELD_INTEGER),
+	DEFINE_FIELD(CBasePlayerWeapon, m_fMaxSpeed, FIELD_FLOAT),
 	DEFINE_FIELD(CBasePlayerWeapon, m_flAccuracy, FIELD_FLOAT),
 	DEFINE_FIELD(CBasePlayerWeapon, m_iShotsFired, FIELD_INTEGER),
 	DEFINE_FIELD(CBasePlayerWeapon, m_bDelayFire, FIELD_CHARACTER),
@@ -471,6 +472,10 @@ int CBasePlayerWeapon::Restore(CRestore &restore)
 		return 0;
 	if (!restore.ReadFields("CBasePlayerWeapon", this, m_SaveData, ARRAYSIZE(m_SaveData)))
 		return 0;
+
+	// m_fMaxSpeed is set in Spawn only; 0 would mean unlimited speed (old saves)
+	if (m_fMaxSpeed <= 0.0f)
+		m_fMaxSpeed = 250.0f;
 
 #ifdef REGAMEDLL_API
 	// per-instance ItemInfo (iMaxClip, ammo names, flags) is filled in Spawn() only, and restore calls
