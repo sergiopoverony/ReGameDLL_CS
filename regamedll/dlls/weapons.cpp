@@ -331,7 +331,9 @@ void WeaponsPrecache()
 	UTIL_PrecacheOther("ammo_762nato");
 
 	// m249
+	UTIL_PrecacheOtherWeapon("weapon_m60"); // before m249: both share one weapon id, the m249 info must be the last registered
 	UTIL_PrecacheOtherWeapon("weapon_m249");
+	UTIL_PrecacheOtherWeapon("weapon_laws");
 	UTIL_PrecacheOther("ammo_556natobox");
 
 	UTIL_PrecacheOtherWeapon("weapon_m4a1");

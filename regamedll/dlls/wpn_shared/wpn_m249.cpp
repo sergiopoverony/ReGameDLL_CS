@@ -1,13 +1,19 @@
 #include "precompiled.h"
 
 LINK_ENTITY_TO_CLASS(weapon_m249, CM249, CCSM249)
+LINK_ENTITY_TO_CLASS(weapon_m60, CM249, CCSM249) // CZ:DS: M60 = M249 with its own models and sounds
+
+bool CM249::IsM60() const
+{
+	return FClassnameIs(pev, "weapon_m60");
+}
 
 void CM249::Spawn()
 {
 	Precache();
 
 	m_iId = WEAPON_M249;
-	SET_MODEL(edict(), "models/w_m249.mdl");
+	SET_MODEL(edict(), IsM60() ? "models/w_m60.mdl" : "models/w_m249.mdl");
 
 	m_iDefaultAmmo = M249_DEFAULT_GIVE;
 	m_flAccuracy = 0.2f;
@@ -26,6 +32,25 @@ void CM249::Spawn()
 
 void CM249::Precache()
 {
+	if (IsM60())
+	{
+		PRECACHE_MODEL("models/v_m60.mdl");
+		PRECACHE_MODEL("models/w_m60.mdl");
+		PRECACHE_MODEL("models/p_m249.mdl");
+
+		PRECACHE_SOUND("weapons/m60-1.wav");
+		PRECACHE_SOUND("weapons/m60-2.wav");
+		PRECACHE_SOUND("weapons/m60_boxout.wav");
+		PRECACHE_SOUND("weapons/m60_boxin.wav");
+		PRECACHE_SOUND("weapons/m60_chain.wav");
+		PRECACHE_SOUND("weapons/m60_coverup.wav");
+		PRECACHE_SOUND("weapons/m60_coverdown.wav");
+
+		m_iShell = PRECACHE_MODEL("models/rshell.mdl");
+		m_usFireM249 = PRECACHE_EVENT(1, "events/m249.sc");
+		return;
+	}
+
 	PRECACHE_MODEL("models/v_m249.mdl");
 	PRECACHE_MODEL("models/w_m249.mdl");
 
@@ -50,7 +75,7 @@ int CM249::GetItemInfo(ItemInfo *p)
 	p->iMaxAmmo2 = -1;
 	p->iMaxClip = M249_MAX_CLIP;
 	p->iSlot = 0;
-	p->iPosition = 4;
+	p->iPosition = IsM60() ? 21 : 4;
 	p->iId = m_iId = WEAPON_M249;
 	p->iFlags = 0;
 	p->iWeight = M249_WEIGHT;
@@ -64,7 +89,7 @@ BOOL CM249::Deploy()
 	m_iShotsFired = 0;
 	iShellOn = 1;
 
-	return DefaultDeploy("models/v_m249.mdl", "models/p_m249.mdl", M249_DRAW, "m249", UseDecrement() != FALSE);
+	return DefaultDeploy(IsM60() ? "models/v_m60.mdl" : "models/v_m249.mdl", "models/p_m249.mdl", M249_DRAW, "m249", UseDecrement() != FALSE);
 }
 
 void CM249::PrimaryAttack()
@@ -139,7 +164,7 @@ void CM249::M249Fire(float flSpread, float flCycleTime, BOOL fUseAutoAim)
 #endif
 
 	PLAYBACK_EVENT_FULL(flag, m_pPlayer->edict(), m_usFireM249, 0, (float *)&g_vecZero, (float *)&g_vecZero, vecDir.x, vecDir.y,
-		int(m_pPlayer->pev->punchangle.x * 100), int(m_pPlayer->pev->punchangle.y * 100), FALSE, FALSE);
+		int(m_pPlayer->pev->punchangle.x * 100), int(m_pPlayer->pev->punchangle.y * 100), IsM60(), FALSE);
 
 	m_flNextPrimaryAttack = m_flNextSecondaryAttack = GetNextAttackDelay(flCycleTime);
 
@@ -170,7 +195,7 @@ void CM249::M249Fire(float flSpread, float flCycleTime, BOOL fUseAutoAim)
 
 void CM249::Reload()
 {
-	if (DefaultReload(iMaxClip(), M249_RELOAD, M249_RELOAD_TIME))
+	if (DefaultReload(iMaxClip(), M249_RELOAD, IsM60() ? 5.8f : M249_RELOAD_TIME))
 	{
 		m_pPlayer->SetAnimation(PLAYER_RELOAD);
 

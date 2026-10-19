@@ -255,6 +255,7 @@ set(GAMEDLL_SRCS
 	"dlls/cz/cz_tools.cpp"
 	"dlls/cz/cz_props.cpp"
 	"dlls/cz/cz_soldier.cpp"
+	"dlls/cz/cz_law.cpp"
 	"dlls/tutor.cpp"
 	"dlls/tutor_base_states.cpp"
 	"dlls/tutor_base_tutor.cpp"
@@ -343,7 +344,6 @@ set(GAMEDLL_SRCS
 
 if (MSVC)
 	set(GAMEDLL_SRCS ${GAMEDLL_SRCS}
-		"msvc/mp.def"
 		"public/tier0/assert_dialog.cpp"
 		"public/tier0/platform_win32.cpp"
 		"public/tier0/assert_dialog.rc")
@@ -375,6 +375,13 @@ if (NOT TARGET appversion)
 endif()
 
 add_dependencies(regamedll appversion)
+
+if (MSVC)
+	# CZ:DS: Xash3D resolves think/touch/use function pointers of the save files through the DLL export table
+	# (COM_NameForFunction/COM_FunctionFromName), so every function must be exported or save/load breaks
+	# ("Invalid function pointer in entity"). GiveFnptrsToDll is exported with dllexport in h_export.cpp.
+	set_target_properties(regamedll PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
 
 target_include_directories(regamedll PRIVATE
 	${PROJECT_SRC_DIR}

@@ -605,9 +605,6 @@ BOOL CBreakable::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 {
 	Vector vecTemp;
 
-	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
-		ALERT(at_console, "breakable hit: %s dmg=%.1f hp=%.1f type=%d\n", STRING(pev->model), flDamage, pev->health, bitsDamageType);
-
 	// if Attacker == Inflictor, the attack was a melee or other instant-hit attack.
 	// (that is, no actual entity projectile was involved in the attack so use the shooter's origin).
 	if (pevAttacker == pevInflictor)

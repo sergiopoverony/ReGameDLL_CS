@@ -1320,6 +1320,7 @@ public:
 	}
 
 public:
+	bool IsM60() const;
 	void M249Fire(float flSpread, float flCycleTime, BOOL fUseAutoAim);
 
 	int m_iShell;
