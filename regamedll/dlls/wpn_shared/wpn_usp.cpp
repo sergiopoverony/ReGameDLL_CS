@@ -12,6 +12,9 @@ void CUSP::Spawn()
 	m_iWeaponState &= ~WPNSTATE_SHIELD_DRAWN;
 	m_iDefaultAmmo = USP_DEFAULT_GIVE;
 	m_flAccuracy = 0.92f;
+	// CZ:DS: USP and M4A1 come with the silencer attached (alt fire removes it)
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		m_iWeaponState |= WPNSTATE_USP_SILENCED;
 
 #ifdef REGAMEDLL_API
 	CSPlayerWeapon()->m_flBaseDamage = USP_DAMAGE;

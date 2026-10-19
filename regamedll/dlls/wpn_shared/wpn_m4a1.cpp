@@ -11,6 +11,9 @@ void CM4A1::Spawn()
 
 	m_iDefaultAmmo = M4A1_DEFAULT_GIVE;
 	m_flAccuracy = 0.2f;
+	// CZ:DS: USP and M4A1 come with the silencer attached (alt fire removes it)
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		m_iWeaponState |= WPNSTATE_M4A1_SILENCED;
 	m_iShotsFired = 0;
 	m_bDelayFire = true;
 

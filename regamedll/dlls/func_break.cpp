@@ -114,6 +114,14 @@ void CBreakable::Spawn()
 	// set size and link into world.
 	SET_MODEL(ENT(pev), STRING(pev->model));
 
+	// CZ:DS diagnostics: dump every breakable on cz maps
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+	{
+		ALERT(at_console, "breakable: %s model=%s mat=%d hp=%.0f sf=%d solid=%d takedamage=%d mins=(%.0f %.0f %.0f) maxs=(%.0f %.0f %.0f) rm=%d\n",
+			STRING(pev->targetname), STRING(pev->model), (int)m_Material, pev->health, pev->spawnflags, pev->solid, (int)pev->takedamage,
+			pev->mins.x, pev->mins.y, pev->mins.z, pev->maxs.x, pev->maxs.y, pev->maxs.z, pev->rendermode);
+	}
+
 	SetTouch(&CBreakable::BreakTouch);
 
 	// Only break on trigger
@@ -596,6 +604,9 @@ void CBreakable::TraceAttack(entvars_t *pevAttacker, float flDamage, Vector vecD
 BOOL CBreakable::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType)
 {
 	Vector vecTemp;
+
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		ALERT(at_console, "breakable hit: %s dmg=%.1f hp=%.1f type=%d\n", STRING(pev->model), flDamage, pev->health, bitsDamageType);
 
 	// if Attacker == Inflictor, the attack was a melee or other instant-hit attack.
 	// (that is, no actual entity projectile was involved in the attack so use the shooter's origin).
