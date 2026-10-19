@@ -230,6 +230,9 @@ void CTriggerSequence::Resolve()
 void CTriggerSequence::Precache()
 {
 	if (!m_entry)
+		Resolve(); // after a load m_entry is empty (not saved)
+
+	if (!m_entry)
 		return;
 
 	for (size_t i = 0; i < m_entry->commands.size(); i++)
