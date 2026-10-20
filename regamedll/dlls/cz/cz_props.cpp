@@ -428,6 +428,7 @@ public:
 	string_t m_useTarget;
 	string_t m_deathAnim;
 	bool m_bDead = false;
+	bool m_bDeadSwapped = false;
 	int m_head;
 	int m_spawned;
 	bool m_bScripted; // driven by scripted_sequence
@@ -466,6 +467,7 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_useTarget, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_deathAnim, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_bDead, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bDeadSwapped, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_head, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_spawned, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_bScripted, FIELD_CHARACTER),
@@ -638,7 +640,24 @@ void Cz_Say(edict_t *pEdict, const char *kind)
 void CMonsterNPC::Precache()
 {
 	if (!FStringNull(pev->model))
+	{
 		PRECACHE_MODEL((char *)STRING(pev->model));
+		if (!FStringNull(m_deathAnim))
+		{
+			// "<name>_dead.mdl" replaces the model after the death animation (machinery.mdl -> machinery_dead.mdl)
+			char dead[256];
+			Q_strncpy(dead, STRING(pev->model), sizeof(dead) - 12);
+			dead[sizeof(dead) - 12] = 0;
+			char *dot = Q_strrchr(dead, '.');
+			if (dot)
+			{
+				*dot = 0;
+				Q_strcat(dead, "_dead.mdl");
+				if (g_pFileSystem->FileExists(dead))
+					PRECACHE_MODEL(dead);
+			}
+		}
+	}
 	Cz_PrecacheVoices();
 }
 
@@ -688,6 +707,31 @@ void CMonsterNPC::Spawn()
 void CMonsterNPC::AnimThink()
 {
 	StudioFrameAdvance();
+
+	// death animation finished: swap to the "_dead" model (idle only)
+	if (m_bDead && !m_bDeadSwapped && m_fSequenceFinished && !FStringNull(m_deathAnim))
+	{
+		m_bDeadSwapped = true;
+		char dead[256];
+		Q_strncpy(dead, STRING(pev->model), sizeof(dead) - 12);
+		dead[sizeof(dead) - 12] = 0;
+		char *dot = Q_strrchr(dead, '.');
+		if (dot)
+		{
+			*dot = 0;
+			Q_strcat(dead, "_dead.mdl");
+			if (g_pFileSystem->FileExists(dead))
+			{
+				pev->model = ALLOC_STRING(dead);
+				SET_MODEL(ENT(pev), dead);
+				pev->sequence = 0;
+				pev->frame = 0;
+				ResetSequenceInfo();
+				m_fSequenceLoops = TRUE;
+				ALERT(at_console, "monster_generic '%s': swapped to %s\n", STRING(pev->targetname), dead);
+			}
+		}
+	}
 
 	if (m_bMoving)
 		MoveStep(0, false);
