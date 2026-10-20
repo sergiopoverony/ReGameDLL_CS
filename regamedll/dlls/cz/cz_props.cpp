@@ -104,7 +104,7 @@ void CItemGeneric::Precache()
 		// dark-textured props (lab microscopes on the train02 shelves) stay black even with the multiplier:
 		// light them flat so they never go black
 		if (m_iLightMul > 10 && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "microscope"))
-			pev->effects |= EF_FULLBRIGHT;
+			pev->effects |= (1U << 27); // EF_FULLBRIGHT (Xash)
 	}
 	if (!FStringNull(pev->model))
 		PRECACHE_MODEL((char *)STRING(pev->model));
