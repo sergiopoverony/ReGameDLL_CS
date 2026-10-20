@@ -180,7 +180,9 @@ void CSmokeGrenade::WeaponIdle()
 
 	if (m_flStartThrow)
 	{
-		m_pPlayer->Radio("%!MRAD_FIREINHOLE", "#Fire_in_the_hole");
+		// czeror has no CS radio chatter
+		if (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+			m_pPlayer->Radio("%!MRAD_FIREINHOLE", "#Fire_in_the_hole");
 
 		Vector angThrow = m_pPlayer->pev->v_angle + m_pPlayer->pev->punchangle;
 

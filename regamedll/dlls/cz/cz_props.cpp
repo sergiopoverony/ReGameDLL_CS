@@ -37,10 +37,12 @@ public:
 	string_t m_sequenceName;
 	int m_removeOnUse;
 	int m_spawned;
+	int m_iLightMul = 0;
 };
 
 TYPEDESCRIPTION CItemGeneric::m_SaveData[] =
 {
+	DEFINE_FIELD(CItemGeneric, m_iLightMul, FIELD_INTEGER),
 	DEFINE_FIELD(CItemGeneric, m_sequenceName, FIELD_STRING),
 	DEFINE_FIELD(CItemGeneric, m_removeOnUse, FIELD_INTEGER),
 };
@@ -68,6 +70,12 @@ void CItemGeneric::KeyValue(KeyValueData *pkvd)
 		m_removeOnUse = Q_atoi(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if (FStrEq(pkvd->szKeyName, "lightmultiplier"))
+	{
+		// CZ: per-model light boost = renderfx 25 (Xash kRenderFxLightMultiplier), value in iuser4 (light *= iuser4 / 10)
+		m_iLightMul = Q_atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
 	else
 		CBaseAnimating::KeyValue(pkvd);
 }
@@ -89,6 +97,11 @@ void CItemGeneric::ApplySequence(const char *name)
 
 void CItemGeneric::Precache()
 {
+	if (m_iLightMul > 0)
+	{
+		pev->renderfx = kRenderFxLightMultiplier;
+		pev->iuser4 = m_iLightMul;
+	}
 	if (!FStringNull(pev->model))
 		PRECACHE_MODEL((char *)STRING(pev->model));
 }
