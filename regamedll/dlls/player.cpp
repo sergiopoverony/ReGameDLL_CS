@@ -916,7 +916,13 @@ BOOL EXT_FUNC CBasePlayer::__API_HOOK(TakeDamage)(entvars_t *pevInflictor, entva
 	// czeror (HL-based): armor absorbs 80% of environmental damage (ratio 0.2), CS armor only 50%.
 	// Without this the damage course in cz_train02 drains HP much faster than in the original.
 	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && (FNullEnt(ENT(pevAttacker)) || !CBaseEntity::Instance(pevAttacker)->IsPlayer()))
+	{
 		flRatio = 0.2f;
+		// environmental damage has no hitgroup: a stale m_LastHitGroup (leg/head) or missing kevlar flag must not bypass armor
+		m_LastHitGroup = HITGROUP_GENERIC;
+		if (pev->armorvalue > 0.0f && m_iKevlar == ARMOR_NONE)
+			m_iKevlar = ARMOR_KEVLAR;
+	}
 	int iGunType = 0;
 	float flShieldRatio = 0;
 	BOOL bTeamAttack = FALSE;
