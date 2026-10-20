@@ -913,6 +913,10 @@ BOOL EXT_FUNC CBasePlayer::__API_HOOK(TakeDamage)(entvars_t *pevInflictor, entva
 	BOOL bTookDamage;
 	float flRatio = ARMOR_RATIO;
 	float flBonus = ARMOR_BONUS;
+	// czeror (HL-based): armor absorbs 80% of environmental damage (ratio 0.2), CS armor only 50%.
+	// Without this the damage course in cz_train02 drains HP much faster than in the original.
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && (FNullEnt(ENT(pevAttacker)) || !CBaseEntity::Instance(pevAttacker)->IsPlayer()))
+		flRatio = 0.2f;
 	int iGunType = 0;
 	float flShieldRatio = 0;
 	BOOL bTeamAttack = FALSE;

@@ -855,6 +855,14 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		m_flProgTime = gpGlobals->time;
 		m_flProgDist = d;
 	}
+	else if (finalLeg && stopDist <= 0 && d < 72.0f && gpGlobals->time - m_flProgTime > 0.35f)
+	{
+		// pressed against the target (e.g. a wall panel/button): count as arrived instead of running in place
+		pev->angles.y = m_flMoveYaw;
+		m_bArrived = true;
+		StopMove();
+		return true;
+	}
 	else if (gpGlobals->time - m_flProgTime > 1.2f)
 	{
 		m_flProgTime = gpGlobals->time;
