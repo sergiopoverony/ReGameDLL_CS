@@ -30,6 +30,8 @@
 
 BOOL gInitHUD = TRUE;
 
+static bool g_czRestoreResetSpeed = false;
+
 TYPEDESCRIPTION CBasePlayer::m_playerSaveData[] =
 {
 	DEFINE_FIELD(CBasePlayer, m_flFlashLightTime, FIELD_TIME),
@@ -5346,6 +5348,39 @@ LINK_HOOK_CLASS_VOID_CHAIN2(CBasePlayer, PostThink)
 
 void EXT_FUNC CBasePlayer::__API_HOOK(PostThink)()
 {
+	if (g_czRestoreResetSpeed)
+	{
+		g_czRestoreResetSpeed = false;
+		ResetMaxSpeed();
+	}
+
+	// CZ debug: cz_dbg_move 1 prints movement state once a second
+	{
+		static cvar_t cz_dbg_move = { "cz_dbg_move", "0", 0, 0.0f, nullptr };
+		static bool dbgReg = false;
+		static float dbgNext = 0.0f;
+		if (!dbgReg)
+		{
+			dbgReg = true;
+			CVAR_REGISTER(&cz_dbg_move);
+		}
+		if (cz_dbg_move.value > 0 && gpGlobals->time >= dbgNext && IsAlive())
+		{
+			dbgNext = gpGlobals->time + 1.0f;
+			ALERT(at_console, "cz_dbg_move: accel=%.1f airaccel=%.1f friction=%.1f stopspeed=%.1f svmax=%.1f pevfric=%.2f pevgrav=%.2f\n",
+				CVAR_GET_FLOAT("sv_accelerate"), CVAR_GET_FLOAT("sv_airaccelerate"), CVAR_GET_FLOAT("sv_friction"),
+				CVAR_GET_FLOAT("sv_stopspeed"), CVAR_GET_FLOAT("sv_maxspeed"), pev->friction, pev->gravity);
+			ALERT(at_console, "cz_dbg_move: wpn=%s pev->maxspeed=%.1f wpnMaxSpeed=%.1f speed=%.1f onground=%d fuser2=%.1f velmod=%.2f\n",
+				m_pActiveItem ? STRING(m_pActiveItem->pev->classname) : "none",
+				pev->maxspeed,
+				m_pActiveItem ? m_pActiveItem->GetMaxSpeed() : -1.0f,
+				pev->velocity.Length2D(),
+				(pev->flags & FL_ONGROUND) ? 1 : 0,
+				pev->fuser2,
+				m_flVelocityModifier);
+		}
+	}
+
 	// intermission or finale
 	if (g_pGameRules->IsGameOver())
 		goto pt_end;
@@ -6225,6 +6260,12 @@ int CBasePlayer::Restore(CRestore &restore)
 
 	// turn this way immediately
 	pev->fixangle = 1;
+
+	// not in the save table: is set in Spawn() only, 0 here would scale velocity by 0.01.. after load
+	m_flVelocityModifier = 1.0f;
+
+	// pev->maxspeed must be recomputed from the (restored) active item / rules, done in PostThink
+	g_czRestoreResetSpeed = true;
 
 	// Copied from spawn() for now
 	m_bloodColor = BLOOD_COLOR_RED;
