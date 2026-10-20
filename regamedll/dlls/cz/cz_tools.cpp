@@ -809,6 +809,9 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 // called from ServerActivate: a level without a saved cz_state (new map, or an older save) starts without tools
 void Cz_ServerActivate()
 {
+	// these statics survive a load in the same process: a save made/loaded while looking through the camera left the fiber view "on" forever
+	g_fiberOn = false;
+	g_fiberExitT = -10;
 	if (UTIL_FindEntityByClassname(nullptr, "cz_state"))
 		return;
 	g_czTools = 0;
