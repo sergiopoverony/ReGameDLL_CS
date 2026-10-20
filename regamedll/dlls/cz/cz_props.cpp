@@ -541,15 +541,30 @@ bool Cz_KillGeneric(CBaseEntity *pEnt)
 		return false;
 	int seq = m->LookupSequence(STRING(m->m_deathAnim));
 	if (seq < 0)
+		seq = m->LookupSequence("explode");
+	if (seq < 0)
+		seq = m->LookupSequence("death");
+	if (seq < 0)
+	{
+		ALERT(at_console, "monster_generic '%s': death anim '%s' NOT FOUND in model\n", STRING(m->pev->targetname), STRING(m->m_deathAnim));
 		return false;
+	}
 	m->m_bDead = true;
 	m->m_bScripted = false;
 	m->m_bMoving = false;
+	m->m_bFollow = false;
 	m->pev->sequence = seq;
 	m->pev->frame = 0;
+	m->pev->framerate = 1.0f;
 	m->ResetSequenceInfo();
+	if (m->pev->framerate <= 0.0f)
+		m->pev->framerate = 1.0f;
+	m->pev->effects &= ~EF_NODRAW;
 	m->pev->solid = SOLID_NOT;
-	ALERT(at_aiconsole, "monster_generic '%s': death anim '%s'\n", STRING(m->pev->targetname), STRING(m->m_deathAnim));
+	// make sure the animation keeps advancing (stays on the last frame afterwards)
+	m->SetThink(&CMonsterNPC::AnimThink);
+	m->pev->nextthink = gpGlobals->time + 0.01f;
+	ALERT(at_console, "monster_generic '%s': death anim '%s' (seq %d, fps %.1f)\n", STRING(m->pev->targetname), STRING(m->m_deathAnim), seq, m->pev->framerate);
 	return true;
 }
 

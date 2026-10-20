@@ -252,12 +252,16 @@ void CTriggerKillTarget::KillEmAll(CBaseEntity *pActivator, CBaseEntity *pCaller
 		return;
 
 	CBaseEntity *pTarget = nullptr;
+	int nFound = 0;
 	while ((pTarget = UTIL_FindEntityByTargetname(pTarget, STRING(pev->target))) != nullptr)
 	{
+		nFound++;
 		if (!(pev->spawnflags & 1) && Cz_KillGeneric(pTarget))
 			continue;
 		UTIL_Remove(pTarget);
 	}
+
+	ALERT(at_console, "trigger_killtarget '%s': target '%s' found %d\n", STRING(pev->targetname), STRING(pev->target), nFound);
 
 	if (pev->spawnflags & 2)
 		UTIL_Remove(this);
