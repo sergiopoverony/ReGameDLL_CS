@@ -64,6 +64,7 @@ static CBasePlayer *Cz_Player()
 }
 
 static void Cz_EnsureStateFwd();
+static void Cz_AbortFiberView(CBasePlayer *pl);
 
 static void Cz_WeapAnim(CBasePlayer *pl, int anim)
 {
@@ -446,6 +447,7 @@ public:
 				Cz_SendIcons(true);
 				Cz_SendTool();
 				ALERT(at_console, "cz_state: icons re-sent after load (tools=%d)\n", g_czTools);
+				Cz_AbortFiberView(pl);
 			}
 			if (m_bLoaded)
 		{
@@ -454,6 +456,7 @@ public:
 			m_bLoaded = false;
 			m_tResend = gpGlobals->time + 2.0f;
 			ALERT(at_console, "cz_state: restored after load, tools=%d charges=%d\n", g_czTools, g_rcCharges);
+			Cz_AbortFiberView(pl);
 			g_czStatePending = false;
 			g_czLastA = g_czLastC = -1;
 			if ((g_czTools & CZ_ICON_RCBOMB) && !UTIL_FindEntityByClassname(nullptr, "cz_rc_ctl"))
@@ -1075,6 +1078,35 @@ static void Cz_SetFov(CBasePlayer *pl, int fov)
 	MESSAGE_BEGIN(MSG_ONE, gmsgSetFOV, nullptr, pl->pev);
 		WRITE_BYTE(fov);
 	MESSAGE_END();
+}
+
+// a game saved while looking through the fiber optic camera: the client forgets the camera view on load,
+// so drop the whole viewing state (zoom 120 left a fish-eye view with the own body visible)
+static void Cz_AbortFiberView(CBasePlayer *pl)
+{
+	CBaseEntity *c = nullptr;
+	while ((c = UTIL_FindEntityByClassname(c, "info_camera")) != nullptr)
+	{
+		CCZInfoCamera *cam = (CCZInfoCamera *)c;
+		if (cam->m_hViewer)
+		{
+			cam->m_hViewer = nullptr;
+			cam->SetThink(nullptr);
+		}
+	}
+	g_fiberOn = false;
+	if (pl)
+	{
+		if (pl->m_iFOV == 120 || pl->m_iFOV == 60)
+			Cz_SetFov(pl, 90);
+		if (pl->pev->movetype == MOVETYPE_NONE && pl->IsAlive())
+			pl->pev->movetype = MOVETYPE_WALK;
+		SET_VIEW(pl->edict(), pl->edict());
+		MESSAGE_BEGIN(MSG_ONE, gmsgCzFiber, nullptr, pl->pev);
+			WRITE_BYTE(0);
+			WRITE_BYTE(0);
+		MESSAGE_END();
+	}
 }
 
 void CCZInfoCamera::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
