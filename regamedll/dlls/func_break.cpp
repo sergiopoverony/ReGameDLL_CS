@@ -85,6 +85,7 @@ TYPEDESCRIPTION CBreakable::m_SaveData[] =
 	DEFINE_FIELD(CBreakable, m_iszGibModel, FIELD_STRING),
 	DEFINE_FIELD(CBreakable, m_iszSpawnObject, FIELD_STRING),
 	DEFINE_FIELD(CBreakable, m_flHealth, FIELD_FLOAT),
+	DEFINE_FIELD(CBreakable, m_iOnlyBy, FIELD_INTEGER),
 };
 
 LINK_ENTITY_TO_CLASS(func_breakable, CBreakable, CCSBreakable)
@@ -189,7 +190,7 @@ void CBreakable::KeyValue(KeyValueData *pkvd)
 	// CZ:DS: only this weapon can damage the object (1 = blowtorch, 2 = radio controlled bomb)
 	if (FStrEq(pkvd->szKeyName, "onlydamagedby"))
 	{
-		pev->iuser4 = Q_strstr(pkvd->szValue, "blowtorch") ? 1 : (Q_strstr(pkvd->szValue, "radiocontrolled") ? 2 : 3);
+		m_iOnlyBy = pev->iuser4 = Q_strstr(pkvd->szValue, "blowtorch") ? 1 : (Q_strstr(pkvd->szValue, "radiocontrolled") ? 2 : 3);
 		pkvd->fHandled = TRUE;
 		return;
 	}
@@ -334,6 +335,9 @@ void CBreakable::MaterialSoundRandom(edict_t *pEdict, Materials soundMaterial, f
 
 void CBreakable::Precache()
 {
+	// pev->iuser4 is not saved by the engine: restore it from our own saved field
+	if (m_iOnlyBy)
+		pev->iuser4 = m_iOnlyBy;
 	const char *pGibName = nullptr;
 
 	switch (m_Material)

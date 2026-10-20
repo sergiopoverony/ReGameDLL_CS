@@ -114,6 +114,7 @@ public:
 	int m_iszGibModel;
 	int m_iszSpawnObject;
 	float m_flHealth;
+	int m_iOnlyBy;
 };
 
 #define SF_PUSH_BREAKABLE BIT(7) // func_pushable (it's also func_breakable, so don't collide with those flags)
