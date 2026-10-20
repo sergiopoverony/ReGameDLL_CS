@@ -101,10 +101,8 @@ void CItemGeneric::Precache()
 	{
 		pev->renderfx = kRenderFxLightMultiplier;
 		pev->iuser4 = m_iLightMul;
-		// dark-textured props (lab microscopes on the train02 shelves) stay black even with the multiplier:
-		// light them flat so they never go black
-		if (m_iLightMul > 10 && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "microscope"))
-			pev->effects |= (1U << 27); // EF_FULLBRIGHT (Xash)
+		// iuser4 may not survive the entity delta: the multiplier also travels in renderamt (unused for rendermode normal)
+		pev->renderamt = m_iLightMul > 255 ? 255 : m_iLightMul;
 	}
 	if (!FStringNull(pev->model))
 		PRECACHE_MODEL((char *)STRING(pev->model));

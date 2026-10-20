@@ -438,11 +438,22 @@ public:
 			pev->nextthink = gpGlobals->time + 0.05f;
 			CBasePlayer *pl = Cz_Player();
 			Cz_RunQueue(pl);
+			if (m_tResend > 0 && pl && gpGlobals->time >= m_tResend)
+			{
+				// the first HUD messages after a load can be lost while the client is still connecting
+				m_tResend = 0;
+				g_czLastA = g_czLastC = -1;
+				Cz_SendIcons(true);
+				Cz_SendTool();
+				ALERT(at_console, "cz_state: icons re-sent after load (tools=%d)\n", g_czTools);
+			}
 			if (m_bLoaded)
 		{
 			if (!pl)
 				return;
 			m_bLoaded = false;
+			m_tResend = gpGlobals->time + 2.0f;
+			ALERT(at_console, "cz_state: restored after load, tools=%d charges=%d\n", g_czTools, g_rcCharges);
 			g_czStatePending = false;
 			g_czLastA = g_czLastC = -1;
 			if ((g_czTools & CZ_ICON_RCBOMB) && !UTIL_FindEntityByClassname(nullptr, "cz_rc_ctl"))
@@ -494,6 +505,7 @@ public:
 	Vector m_rcPos, m_rcAng;
 	EHANDLE m_hPlanted;
 	bool m_bLoaded = false;
+	float m_tResend = 0;
 };
 TYPEDESCRIPTION CCZState::m_SaveData[] =
 {
@@ -814,6 +826,7 @@ void Cz_ServerActivate()
 	g_fiberExitT = -10;
 	if (UTIL_FindEntityByClassname(nullptr, "cz_state"))
 		return;
+	ALERT(at_console, "cz: no cz_state in this level - tools reset (had %d)\n", g_czTools);
 	g_czTools = 0;
 	g_rcState = 0;
 	g_rcCharges = 5;
