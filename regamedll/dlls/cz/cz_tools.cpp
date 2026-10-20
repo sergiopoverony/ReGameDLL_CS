@@ -681,7 +681,10 @@ void CCZRcCtl::CtlThink()
 		CBaseEntity *brk = nullptr;
 		while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
 		{
-			if (brk->pev->iuser4 == 2 && brk->pev->takedamage != DAMAGE_NO)
+			bool byTarget = !FStringNull(brk->pev->target) && FStrEq(STRING(brk->pev->target), "bomb_target2");
+			ALERT(at_console, "rc bomb: breakable '%s' model=%s onlyby=%d takedamage=%d target=%s\n", STRING(brk->pev->targetname),
+				STRING(brk->pev->model), brk->pev->iuser4, (int)brk->pev->takedamage, STRING(brk->pev->target));
+			if ((brk->pev->iuser4 == 2 || byTarget) && brk->pev->takedamage != DAMAGE_NO)
 			{
 				ALERT(at_aiconsole, "rc bomb: breaking '%s'\n", STRING(brk->pev->targetname));
 				brk->Use(pl, pl, USE_TOGGLE, 0);
