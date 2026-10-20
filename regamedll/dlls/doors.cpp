@@ -500,6 +500,11 @@ void CBaseDoor::DoorGoUp()
 	entvars_t *pevActivator;
 	bool isReversing = (m_toggle_state == TS_GOING_DOWN);
 
+	// czeror: a lid/cover that opens and stays open (no auto return) must not be able to block on the player
+	// and jam shut (e.g. the cover over the documents in cz_train02): make it non-solid as it starts to open
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && FClassnameIs(pev, "func_door_rotating") && (pev->spawnflags & 32))
+		pev->solid = SOLID_NOT;
+
 	// It could be going-down, if blocked.
 	DbgAssert(m_toggle_state == TS_AT_BOTTOM || m_toggle_state == TS_GOING_DOWN);
 
