@@ -6267,6 +6267,9 @@ int CBasePlayer::Restore(CRestore &restore)
 	// pev->maxspeed must be recomputed from the (restored) active item / rules, done in PostThink
 	g_czRestoreResetSpeed = true;
 
+	// client HUD is reset on load: force HideWeapon (timer/money bits) to be resent
+	m_iClientHideHUD = -1;
+
 	// Copied from spawn() for now
 	m_bloodColor = BLOOD_COLOR_RED;
 	m_modelIndexPlayer = pev->modelindex;
