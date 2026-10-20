@@ -824,7 +824,8 @@ void Cz_ServerActivate()
 	// these statics survive a load in the same process: a save made/loaded while looking through the camera left the fiber view "on" forever
 	g_fiberOn = false;
 	g_fiberExitT = -10;
-	if (UTIL_FindEntityByClassname(nullptr, "cz_state"))
+	// a restored cz_state already put the saved tools back (its Precache ran before ServerActivate): keep them
+	if (g_czStatePending || UTIL_FindEntityByClassname(nullptr, "cz_state"))
 		return;
 	ALERT(at_console, "cz: no cz_state in this level - tools reset (had %d)\n", g_czTools);
 	g_czTools = 0;
