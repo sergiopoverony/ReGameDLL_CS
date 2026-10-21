@@ -1468,13 +1468,17 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (m_state != 0)
 		return;
 
+	if (m_state != 0)
+		ALERT(at_console, "scripted_sequence '%s': used while busy (state %d)\n", STRING(pev->targetname), m_state);
 	CMonsterNPC *npc = FindNPC();
 	if (!npc)
 	{
-		ALERT(at_console, "scripted_sequence: can't find monster_npc '%s'\n", STRING(m_iszEntity));
+		ALERT(at_console, "scripted_sequence '%s': can't find monster_npc '%s'\n", STRING(pev->targetname), STRING(m_iszEntity));
 		return;
 	}
 
+	ALERT(at_console, "scripted_sequence '%s': '%s' (%s) at %.0f %.0f %.0f %s to %.0f %.0f %.0f play '%s'\n", STRING(pev->targetname), STRING(npc->pev->targetname),
+		STRING(npc->pev->classname), npc->pev->origin.x, npc->pev->origin.y, npc->pev->origin.z, m_fMoveTo == 2 ? "runs" : (m_fMoveTo == 1 ? "walks" : "acts"), pev->origin.x, pev->origin.y, pev->origin.z, STRING(m_iszPlay));
 	m_hNpc = npc;
 	npc->StopFollow();
 	npc->m_bScripted = true;
