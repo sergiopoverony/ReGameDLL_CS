@@ -1795,6 +1795,9 @@ void CCZMissionFailure::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_T
 
 	pl->EnableControl(FALSE);
 
+	// убрать HUD поверх чёрного экрана (HIDEHUD_ALL не ставим: пропадёт и текст)
+	pl->m_iHideHUD |= (HIDEHUD_WEAPONS | HIDEHUD_FLASHLIGHT | HIDEHUD_HEALTH | HIDEHUD_TIMER | HIDEHUD_MONEY | HIDEHUD_CROSSHAIR);
+
 	if (!Q_strcmp(STRING(pev->classname), "trigger_endmission") && !FStringNull(m_nextMap))
 	{
 		SetThink(&CCZMissionFailure::ChangeMap);
