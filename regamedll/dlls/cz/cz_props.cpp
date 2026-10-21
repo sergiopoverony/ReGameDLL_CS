@@ -453,6 +453,7 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_hPatrol, FIELD_EHANDLE),
 	DEFINE_FIELD(CMonsterNPC, m_flPatrolNext, FIELD_TIME),
 	DEFINE_FIELD(CMonsterNPC, m_flGhostUntil, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flLiftApplied, FIELD_FLOAT),
 	DEFINE_FIELD(CMonsterNPC, m_bAllowGhost, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bBaseYawSet, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bReplanned, FIELD_CHARACTER),
@@ -686,6 +687,22 @@ void CMonsterNPC::Spawn()
 void CMonsterNPC::AnimThink()
 {
 	StudioFrameAdvance();
+
+	// live tuning: cz_npc_lift raises every soldier by N units (for models that sink into the floor)
+	if (m_bAllowGhost)
+	{
+		static bool reg = false;
+		static cvar_t cvLift = { "cz_npc_lift", "0", 0, 0.0f, nullptr };
+		if (!reg) { CVAR_REGISTER(&cvLift); reg = true; }
+		float want = CVAR_GET_FLOAT("cz_npc_lift");
+		if (want != m_flLiftApplied)
+		{
+			Vector o = pev->origin;
+			o.z += want - m_flLiftApplied;
+			m_flLiftApplied = want;
+			UTIL_SetOrigin(pev, o);
+		}
+	}
 
 	// death animation finished: swap to the "_dead" model (idle only)
 	if (m_bDead && !m_bDeadSwapped && m_fSequenceFinished && !FStringNull(m_deathAnim))
