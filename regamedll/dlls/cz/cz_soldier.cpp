@@ -470,7 +470,7 @@ void CCZSoldier::Settle()
 	TraceResult tr;
 	UTIL_TraceHull(pev->origin + Vector(0, 0, 36), pev->origin + Vector(0, 0, 28), ignore_monsters, human_hull, ENT(pev), &tr);
 	CBaseEntity *h = CBaseEntity::Instance(tr.pHit);
-	if (h && h->pev->movetype == MOVETYPE_PUSH && h->pev->solid != SOLID_NOT)
+	if (h && h->edict() != INDEXENT(0) && h->pev->movetype == MOVETYPE_PUSH && h->pev->solid != SOLID_NOT)
 	{
 		m_hPlat = h;
 		m_platOfs = pev->origin - h->pev->origin;
@@ -492,7 +492,7 @@ void CCZSoldier::StandOnFloor()
 	UTIL_SetOrigin(pev, pev->origin);
 
 	CBaseEntity *h = CBaseEntity::Instance(tr.pHit);
-	if (h && h->pev->movetype == MOVETYPE_PUSH && h->pev->solid != SOLID_NOT)
+	if (h && h->edict() != INDEXENT(0) && h->pev->movetype == MOVETYPE_PUSH && h->pev->solid != SOLID_NOT)
 		m_hPlat = h;
 
 	CBaseEntity *plat = m_hPlat;
