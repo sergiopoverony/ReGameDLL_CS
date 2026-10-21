@@ -190,7 +190,7 @@ void CBreakable::KeyValue(KeyValueData *pkvd)
 	// CZ:DS: only this weapon can damage the object (1 = blowtorch, 2 = radio controlled bomb)
 	if (FStrEq(pkvd->szKeyName, "onlydamagedby"))
 	{
-		m_iOnlyBy = pev->iuser4 = Q_strstr(pkvd->szValue, "blowtorch") ? 1 : (Q_strstr(pkvd->szValue, "radiocontrolled") ? 2 : 3);
+		m_iOnlyBy = pev->iuser4 = Q_strstr(pkvd->szValue, "blowtorch") ? 1 : ((Q_strstr(pkvd->szValue, "radiocontrolled") || !Q_stricmp(pkvd->szValue, "bomb")) ? 2 : 3);
 		pkvd->fHandled = TRUE;
 		return;
 	}
@@ -636,6 +636,10 @@ BOOL CBreakable::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 	}
 
 	if (!IsBreakable())
+		return FALSE;
+
+	// CZ:DS: onlydamagedby objects ignore ordinary damage (the tool breaks them through Use)
+	if (m_iOnlyBy && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
 		return FALSE;
 
 	// CZ:DS: range glass is bulletproof against grenades (HE/flash/smoke)

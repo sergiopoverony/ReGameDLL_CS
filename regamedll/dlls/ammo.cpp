@@ -1,5 +1,25 @@
 #include "precompiled.h"
 
+// Condition Zero ammo pickups are boxes of cartridges (cz_ maps); fall back to the CS clip model
+static const char *CzAmmoModel(const char *cls)
+{
+	if (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		return "models/w_9mmclip.mdl";
+
+	const char *m = "models/w_9mmclip_big.mdl";
+	if (!Q_strcmp(cls, "ammo_556nato")) m = "models/w_556natobox.mdl";
+	else if (!Q_strcmp(cls, "ammo_556natobox")) m = "models/w_556natobox_big.mdl";
+	else if (!Q_strcmp(cls, "ammo_762nato")) m = "models/w_762natobox.mdl";
+	else if (!Q_strcmp(cls, "ammo_buckshot")) m = "models/w_shotbox_big.mdl";
+
+	int len = 0;
+	byte *f = LOAD_FILE_FOR_ME((char *)m, &len);
+	if (!f)
+		return "models/w_9mmclip.mdl";
+	FREE_FILE(f);
+	return m;
+}
+
 void CBasePlayerAmmo::Spawn()
 {
 	pev->movetype = MOVETYPE_TOSS;
@@ -90,13 +110,13 @@ void CBasePlayerAmmo::DefaultTouch(CBaseEntity *pOther)
 void C9MMAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C9MMAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -120,13 +140,13 @@ LINK_ENTITY_TO_CLASS(ammo_buckshot, CBuckShotAmmo, CCSBuckShotAmmo)
 void C556NatoAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C556NatoAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -135,13 +155,13 @@ LINK_ENTITY_TO_CLASS(ammo_556nato, C556NatoAmmo, CCS556NatoAmmo)
 void C556NatoBoxAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C556NatoBoxAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -150,13 +170,13 @@ LINK_ENTITY_TO_CLASS(ammo_556natobox, C556NatoBoxAmmo, CCS556NatoBoxAmmo)
 void C762NatoAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C762NatoAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -165,13 +185,13 @@ LINK_ENTITY_TO_CLASS(ammo_762nato, C762NatoAmmo, CCS762NatoAmmo)
 void C45ACPAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C45ACPAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -180,13 +200,13 @@ LINK_ENTITY_TO_CLASS(ammo_45acp, C45ACPAmmo, CCS45ACPAmmo)
 void C50AEAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C50AEAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -195,13 +215,13 @@ LINK_ENTITY_TO_CLASS(ammo_50ae, C50AEAmmo, CCS50AEAmmo)
 void C338MagnumAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C338MagnumAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -210,13 +230,13 @@ LINK_ENTITY_TO_CLASS(ammo_338magnum, C338MagnumAmmo, CCS338MagnumAmmo)
 void C57MMAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C57MMAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
@@ -225,13 +245,13 @@ LINK_ENTITY_TO_CLASS(ammo_57mm, C57MMAmmo, CCS57MMAmmo)
 void C357SIGAmmo::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_9mmclip.mdl");
+	SET_MODEL(ENT(pev), CzAmmoModel(STRING(pev->classname)));
 	CBasePlayerAmmo::Spawn();
 }
 
 void C357SIGAmmo::Precache()
 {
-	PRECACHE_MODEL("models/w_9mmclip.mdl");
+	PRECACHE_MODEL((char *)CzAmmoModel(STRING(pev->classname)));
 	PRECACHE_SOUND("items/9mmclip1.wav");
 }
 
