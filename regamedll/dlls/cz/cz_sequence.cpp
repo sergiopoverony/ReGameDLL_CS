@@ -224,8 +224,32 @@ int Library::ParseText(const char *text, size_t length, const std::string &fileN
 		op.type = line[0];
 		if (op.type == '@')
 		{
-			op.key = Trim(line.substr(1));
+			// "@Style  #text = ..." : call and command on the same line
+			std::string rest = Trim(line.substr(1));
+			size_t sp = 0;
+			while (sp < rest.size() && !isspace((unsigned char)rest[sp])) sp++;
+			op.key = rest.substr(0, sp);
 			cur.ops.push_back(op);
+			std::string tail = Trim(rest.substr(sp));
+			if (!tail.empty() && (tail[0] == '#' || tail[0] == '$'))
+			{
+				Op op2;
+				op2.type = tail[0];
+				std::vector<std::pair<std::string, std::string>> pairs2;
+				SplitPairs(tail.substr(1), pairs2);
+				if (!pairs2.empty())
+				{
+					op2.key = ToLower(pairs2[0].first);
+					for (size_t i = 0; i < pairs2.size(); i++)
+					{
+						Pair p;
+						p.key = ToLower(pairs2[i].first);
+						p.value = pairs2[i].second;
+						op2.args.push_back(p);
+					}
+					cur.ops.push_back(op2);
+				}
+			}
 		}
 		else if (op.type == '$' || op.type == '#')
 		{
