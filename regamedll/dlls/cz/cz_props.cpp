@@ -446,6 +446,14 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_bRun, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bSitting, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bGhost, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bPatrolInit, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bPatrolOn, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bPatrolHeading, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bNoPatrol, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_hPatrol, FIELD_EHANDLE),
+	DEFINE_FIELD(CMonsterNPC, m_flPatrolNext, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flGhostUntil, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_bAllowGhost, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bBaseYawSet, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bReplanned, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bHoldEnd, FIELD_CHARACTER),
@@ -708,6 +716,8 @@ void CMonsterNPC::AnimThink()
 		MoveStep(0, false);
 	else if (m_bFollow && !m_bScripted)
 		FollowStep();
+	else if (!m_bScripted && !m_bDead && !m_bNoPatrol)
+		PatrolStep();
 
 	// animations that are not flagged as looping stop at the last frame: restart them
 	if (m_fSequenceFinished && !m_fSequenceLoops && !m_bScripted && !m_bDead && !m_bHoldEnd)
@@ -751,6 +761,61 @@ void CMonsterNPC::AnimThink()
 	// while walking think every frame and keep velocity non-zero: that switches the engine's
 	// 10 Hz studio "slerp" off and the client interpolates the origin normally
 	pev->nextthink = gpGlobals->time + ((m_bMoving || m_bFollow) ? 0.0f : (turning ? 0.03f : 0.1f));
+}
+
+// patrol along a path_corner chain given by the monster's "target" (generic for every actor)
+void CMonsterNPC::PatrolStep()
+{
+	if (!m_bPatrolInit)
+	{
+		m_bPatrolInit = true;
+		if (!FStringNull(pev->target))
+		{
+			CBaseEntity *c = UTIL_FindEntityByTargetname(nullptr, STRING(pev->target));
+			if (c && FClassnameIs(c->pev, "path_corner"))
+			{
+				m_bPatrolOn = true;
+				m_hPatrol = c;
+				m_flPatrolNext = gpGlobals->time + 0.5f;
+				ALERT(at_console, "patrol: '%s' starts along path_corner '%s'\n", STRING(pev->classname), STRING(pev->target));
+			}
+		}
+	}
+
+	if (!m_bPatrolOn || m_bMoving || m_bFollow)
+		return;
+
+	CBaseEntity *c = m_hPatrol;
+	if (m_bPatrolHeading)
+	{
+		// reached the corner: wait its "wait" time, then take the next one
+		m_bPatrolHeading = false;
+		float wait = c ? c->GetDelay() : 0.0f;
+		CBaseEntity *next = nullptr;
+		if (c && !FStringNull(c->pev->target))
+			next = UTIL_FindEntityByTargetname(nullptr, STRING(c->pev->target));
+		m_hPatrol = next;
+		m_flPatrolNext = gpGlobals->time + wait + 0.05f;
+		if (!next)
+			m_bPatrolOn = false;
+		if (!FStringNull(m_idleAnim))
+			ApplyIdle(STRING(m_idleAnim));
+		else if (!PlaySeq("idle1"))
+			PlaySeq("combatidle");
+		return;
+	}
+
+	if (gpGlobals->time < m_flPatrolNext)
+		return;
+	if (!c)
+	{
+		m_bPatrolOn = false;
+		return;
+	}
+
+	Vector d = c->pev->origin - pev->origin;
+	StartMove(c->pev->origin, UTIL_VecToYaw(Vector(d.x, d.y, 0)), false);
+	m_bPatrolHeading = true;
 }
 
 void CMonsterNPC::BuildPath(const Vector &goal)
@@ -853,7 +918,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		return true;
 	}
 
-	if (m_bGhost)
+	if (m_bGhost || gpGlobals->time < m_flGhostUntil)
 	{
 		// red-shirt worker: follows his path through props (no collision of his own), but stays solid for the player
 		float a = (UTIL_VecToYaw(flat) + m_flBiasCur) * (M_PI / 180.0f);
@@ -967,6 +1032,11 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		{
 			// boxed in: if this lasts, give up following / jump to the mark
 			pev->velocity = Vector(0, 0, 1);
+			if (m_bAllowGhost)
+			{
+				m_flGhostUntil = gpGlobals->time + 0.6f; // hull blocked: step without collision, the node path avoids walls
+				return false;
+			}
 			if (m_flStuckSince == 0.0f)
 				m_flStuckSince = gpGlobals->time;
 			else if (gpGlobals->time - m_flStuckSince > 2.5f && stopDist <= 0)

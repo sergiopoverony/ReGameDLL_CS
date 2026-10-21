@@ -324,6 +324,8 @@ void CCZSoldier::Spawn()
 	pev->deadflag = DEAD_NO;
 	m_bDead = false;
 	m_bNoSit = true;
+	m_bAllowGhost = true;
+	m_bNoPatrol = (m_cantMove != 0) || (pev->spawnflags & 128);
 	m_bHoldEnd = true;
 	m_spawned = 1;
 	pev->skin = isTerror ? 0 : (Q_strstr(STRING(pev->classname), "_swat_") ? 3 : 0); // SWAT uniform
@@ -626,6 +628,7 @@ void CCZSoldier::FireTrigger(CBaseEntity *pActivator)
 		return;
 
 	m_bTrigFired = true;
+	m_bNoPatrol = true; // alerted: stop patrolling
 	ALERT(at_console, "soldier '%s': TriggerCondition %d -> %s\n", STRING(pev->targetname), m_trigCond, STRING(m_trigTarget));
 	FireTargets(STRING(m_trigTarget), pActivator ? pActivator : this, this, USE_TOGGLE, 0);
 }

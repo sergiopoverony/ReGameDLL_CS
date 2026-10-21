@@ -56,6 +56,13 @@ public:
 	bool m_bReplanned = false;
 	bool m_bHoldEnd = false; // non-looping idle (crouch ...) stays on its last frame
 	bool m_bNoSit = false;   // soldiers never get the chair offset
+	// path_corner patrol (monster "target" -> path_corner chain)
+	bool m_bPatrolInit = false, m_bPatrolOn = false, m_bPatrolHeading = false, m_bNoPatrol = false;
+	EHANDLE m_hPatrol;
+	float m_flPatrolNext = 0;
+	float m_flGhostUntil = 0; // collision-free steps for a while after the hull got stuck
+	bool m_bAllowGhost = false; // soldiers: fall back to collision-free steps when boxed in
+	void PatrolStep();
 	Vector m_path[16]; // waypoints (info_node path); the last one is the goal
 	int m_nPath;
 	int m_iPath;
