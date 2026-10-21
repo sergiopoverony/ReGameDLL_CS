@@ -74,6 +74,7 @@ void CItemGeneric::KeyValue(KeyValueData *pkvd)
 	{
 		// CZ: per-model light boost = renderfx 25 (Xash kRenderFxLightMultiplier), value in iuser4 (light *= iuser4 / 10)
 		m_iLightMul = Q_atoi(pkvd->szValue);
+		ALERT(at_console, "item_generic: key lightmultiplier=%d\n", m_iLightMul);
 		pkvd->fHandled = TRUE;
 	}
 	else
@@ -123,6 +124,7 @@ void CItemGeneric::Spawn()
 	pev->solid = SOLID_NOT;
 	pev->takedamage = DAMAGE_NO;
 
+	ALERT(at_console, "item_generic: spawn %s lightmul=%d\n", STRING(pev->model), m_iLightMul);
 	if (m_iLightMul > 0)
 	{
 		pev->renderfx = kRenderFxLightMultiplier;
