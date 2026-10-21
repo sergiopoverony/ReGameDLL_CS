@@ -843,6 +843,8 @@ void CMonsterNPC::BuildPath(const Vector &goal)
 
 void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 {
+	int oldSeq = pev->sequence;
+	float oldFrame = pev->frame;
 	m_vMoveTarget = target;
 	BuildPath(target);
 	m_flMoveYaw = yaw;
@@ -922,6 +924,8 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 					ALERT(at_console, "seqdump %s #%d '%s' act %d fps %.0f lin %.0f/%.0f flags %d\n", STRING(pev->model), i, sd[i].label, sd[i].activity, sd[i].fps, sd[i].linearmovement.x, sd[i].linearmovement.y, sd[i].flags);
 			}
 		}
+		if (pev->sequence == oldSeq)
+			pev->frame = oldFrame; // keep the walk cycle running between legs
 		pev->framerate = 1.0f;
 		if (m_flFrameRate < 0.1f)
 			m_flFrameRate = 1.0f;
@@ -1038,7 +1042,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		m_flProgTime = gpGlobals->time;
 		m_flProgDist = d;
 	}
-	else if (finalLeg && stopDist <= 0 && d < 72.0f && gpGlobals->time - m_flProgTime > 0.35f)
+	else if (finalLeg && stopDist <= 0 && d < 72.0f && gpGlobals->time - m_flProgTime > 0.35f && d > m_flProgDist - 4.0f)
 	{
 		// pressed against the target (e.g. a wall panel/button): count as arrived instead of running in place
 		pev->angles.y = m_flMoveYaw;
