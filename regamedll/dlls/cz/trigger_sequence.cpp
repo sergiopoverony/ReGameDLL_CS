@@ -426,8 +426,15 @@ void CTriggerSequence::ExecuteSound(const czseq::Command &cmd)
 	if (pSpeaker)
 	{
 		Cz_NpcSpeak(pSpeaker, 4.0f);
-		EMIT_SOUND_DYN2(ENT(pSpeaker->pev), CHAN_VOICE, path.c_str(), VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
+		CBaseEntity *pl = UTIL_PlayerByIndex(1);
+		ALERT(at_console, "sequence sound '%s' from '%s' dist %.0f\n", path.c_str(), STRING(pSpeaker->pev->targetname),
+			pl ? (pl->pev->origin - pSpeaker->pev->origin).Length() : -1.0f);
+		// background chatter must stay audible through doors/walls: wide attenuation
+		EMIT_SOUND_DYN2(ENT(pSpeaker->pev), CHAN_VOICE, path.c_str(), VOL_NORM, 0.3f, 0, PITCH_NORM);
 	}
 	else
+	{
+		ALERT(at_console, "sequence sound '%s': no speaker '%s', played globally\n", path.c_str(), cmd.mod.speaker.c_str());
 		EMIT_SOUND_DYN2(ENT(pev), CHAN_VOICE, path.c_str(), VOL_NORM, ATTN_NONE, 0, PITCH_NORM);
+	}
 }
