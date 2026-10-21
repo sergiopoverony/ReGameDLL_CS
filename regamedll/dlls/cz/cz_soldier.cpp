@@ -39,6 +39,17 @@ public:
 	void React(int type); // 1 = flashbang, 2 = smoke grenade
 	void FireTrigger(CBaseEntity *pActivator);
 	void CheckSeePlayer();
+	void CombatThink();
+	void FireShot(CBaseEntity *pl);
+
+	char m_combat = 0;       // 0 calm, 1 fighting the player
+	char m_bHurtByPlayer = 0;
+	int m_burstLeft = 0;
+	float m_flNextShot = 0;
+	float m_flNextMelee = 0;
+	float m_flLastSeen = 0;
+	float m_flNextChase = 0;
+	float m_flFlashOff = 0;
 
 	int m_react;
 	int m_step;
@@ -80,6 +91,14 @@ TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
 	DEFINE_FIELD(CCZSoldier, m_bTrigFired, FIELD_CHARACTER),
 	DEFINE_FIELD(CCZSoldier, m_flNextSee, FIELD_TIME),
 	DEFINE_FIELD(CCZSoldier, m_flFadeStart, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_combat, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZSoldier, m_bHurtByPlayer, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZSoldier, m_burstLeft, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_flNextShot, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flNextMelee, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flLastSeen, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flNextChase, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flFlashOff, FIELD_TIME),
 };
 IMPLEMENT_SAVERESTORE(CCZSoldier, CMonsterNPC)
 
@@ -297,6 +316,210 @@ void CCZSoldier::KeyValue(KeyValueData *pkvd)
 }
 
 static const char *Soldier_Wav(const char *classname, const char *key, char *buf, size_t sz);
+static void Soldier_Voice(CBaseEntity *e, const char *key);
+
+// ---------------------------------------------------------------------------
+// Combat: hostile (terrorist) soldiers shoot the player. Training maps stay peaceful.
+struct SoldierGun
+{
+	const char *name;
+	float dmg, spread, rate; // per shot damage, aim cone (tan), seconds between shots in a burst
+	int burst;
+	float pauseMin, pauseMax;
+	const char *sound;
+	const char *anim;
+};
+
+static const SoldierGun g_soldierGuns[] =
+{
+	{ "pistol",       8, 0.060f, 0.35f, 1, 0.5f, 1.0f, "weapons/usp_unsil-1.wav",   "pistol_combatidlle" },
+	{ "smg",          6, 0.070f, 0.09f, 5, 0.7f, 1.3f, "weapons/mac10-1.wav",       "combatidle" },
+	{ "mp5",          6, 0.055f, 0.09f, 5, 0.7f, 1.3f, "weapons/mp5-1.wav",         "combatidle" },
+	{ "mp",           6, 0.055f, 0.09f, 5, 0.7f, 1.3f, "weapons/mp5-1.wav",         "combatidle" },
+	{ "shotgun",     25, 0.090f, 1.20f, 1, 0.3f, 0.6f, "weapons/m3-1.wav",          "combatidle" },
+	{ "assaultrifle", 9, 0.045f, 0.10f, 4, 0.7f, 1.4f, "weapons/ak47-1.wav",        "combatidle" },
+	{ "sniperrifle", 40, 0.008f, 2.20f, 1, 0.5f, 1.0f, "weapons/awp1.wav",          "combatidle" },
+	{ "machinegun",   7, 0.080f, 0.08f, 9, 1.0f, 1.8f, "weapons/m249-1.wav",        "combatidle" },
+	{ "grenader",     9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
+	{ "law",          9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
+	{ "melee",        0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "combatidle" },
+	{ "kamakazi",     0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "combatidle" },
+};
+
+static const SoldierGun *Soldier_FindGun(const char *classname)
+{
+	const char *p = Q_strrchr(classname, '_');
+	if (p)
+	{
+		for (const SoldierGun &g : g_soldierGuns)
+			if (!Q_strcmp(p + 1, g.name))
+				return &g;
+	}
+	return &g_soldierGuns[5];
+}
+
+static bool Soldier_IsHostile(entvars_t *pev)
+{
+	if (!Q_strstr(STRING(pev->classname), "terrorist"))
+		return false;
+	return Q_strncmp(STRING(gpGlobals->mapname), "cz_train", 8) != 0; // the training is scripted: nobody shoots
+}
+
+void CCZSoldier::FireShot(CBaseEntity *pl)
+{
+	const SoldierGun *g = Soldier_FindGun(STRING(pev->classname));
+	if (!g->sound)
+		return;
+
+	UTIL_MakeVectors(pev->angles);
+	Vector src = pev->origin + Vector(0, 0, 60) + gpGlobals->v_forward * 16;
+	Vector aim = (pl->pev->origin + pl->pev->view_ofs * 0.6f - src).Normalize();
+	Vector dir = aim + gpGlobals->v_right * (RANDOM_FLOAT(-1, 1) * g->spread) + gpGlobals->v_up * (RANDOM_FLOAT(-1, 1) * g->spread);
+	dir = dir.Normalize();
+
+	TraceResult tr;
+	UTIL_TraceLine(src, src + dir * 4096.0f, dont_ignore_monsters, ENT(pev), &tr);
+
+	EMIT_SOUND_DYN(ENT(pev), CHAN_WEAPON, g->sound, 1.0f, ATTN_NORM, 0, 94 + RANDOM_LONG(0, 15));
+	pev->effects |= EF_MUZZLEFLASH;
+	m_flFlashOff = gpGlobals->time + 0.08f;
+
+	// tracer
+	MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, src);
+		WRITE_BYTE(TE_TRACER);
+		WRITE_COORD(src.x); WRITE_COORD(src.y); WRITE_COORD(src.z);
+		WRITE_COORD(tr.vecEndPos.x); WRITE_COORD(tr.vecEndPos.y); WRITE_COORD(tr.vecEndPos.z);
+	MESSAGE_END();
+
+	CBaseEntity *hit = CBaseEntity::Instance(tr.pHit);
+	if (hit && hit->pev->takedamage != DAMAGE_NO)
+	{
+		ClearMultiDamage();
+		hit->TraceAttack(pev, g->dmg, dir, &tr, DMG_BULLET | DMG_NEVERGIB);
+		ApplyMultiDamage(pev, pev);
+	}
+	else if (tr.flFraction < 1.0f)
+	{
+		UTIL_GunshotDecalTrace(&tr, DECAL_GUNSHOT1 + RANDOM_LONG(0, 4), false, pev);
+	}
+}
+
+void CCZSoldier::CombatThink()
+{
+	if (!Soldier_IsHostile(pev) || m_bScripted || (pev->spawnflags & 128))
+		return;
+
+	CBasePlayer *pl = (CBasePlayer *)UTIL_PlayerByIndex(1);
+	if (!pl || !pl->IsAlive() || (pl->pev->flags & FL_NOTARGET))
+	{
+		m_combat = 0;
+		return;
+	}
+
+	Vector eyes = pev->origin + Vector(0, 0, 64);
+	Vector target = pl->pev->origin + pl->pev->view_ofs;
+	Vector to = target - eyes;
+	float dist = to.Length();
+
+	bool visible = false;
+	if (dist < 2400.0f)
+	{
+		TraceResult tr;
+		UTIL_TraceLine(eyes, target, ignore_monsters, ENT(pev), &tr);
+		visible = (tr.flFraction >= 1.0f || tr.pHit == pl->edict());
+		if (visible && !m_combat && !m_bHurtByPlayer)
+		{
+			// calm: only notices the player in front (180 degrees)
+			UTIL_MakeVectors(pev->angles);
+			if (DotProduct(to.Normalize(), gpGlobals->v_forward) < 0.0f)
+				visible = false;
+		}
+	}
+
+	if (!m_combat)
+	{
+		if (!visible && !m_bHurtByPlayer)
+			return;
+
+		m_combat = 1;
+		m_bNoPatrol = true;
+		m_burstLeft = 0;
+		m_flNextShot = gpGlobals->time + RANDOM_FLOAT(0.3f, 0.7f);
+		static const char *spot[] = { "heyyou", "intrudov", "theretheya", "attack" };
+		Soldier_Voice(this, spot[RANDOM_LONG(0, 3)]);
+		FireTrigger(pl);
+	}
+
+	if (visible)
+		m_flLastSeen = gpGlobals->time;
+
+	const SoldierGun *g = Soldier_FindGun(STRING(pev->classname));
+	bool melee = (g->dmg <= 0.0f);
+
+	// face the player
+	if (visible || dist < 300.0f)
+	{
+		float yaw = UTIL_VecToYaw(Vector(to.x, to.y, 0));
+		pev->angles.y = UTIL_ApproachAngle(yaw, pev->angles.y, 400.0f * 0.1f);
+	}
+
+	// positioning: charge when the player is out of sight / too far, hold ground in view
+	float hold = melee ? 40.0f : 600.0f;
+	if (!m_cantMove)
+	{
+		bool want = !visible || dist > hold + 150.0f;
+		if (want && !m_bMoving && gpGlobals->time >= m_flNextChase)
+		{
+			m_flNextChase = gpGlobals->time + 0.8f;
+			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true);
+		}
+		else if (m_bMoving && visible && dist < hold)
+			StopMove();
+		else if (m_bMoving && gpGlobals->time >= m_flNextChase)
+		{
+			m_flNextChase = gpGlobals->time + 0.8f;
+			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true); // follow the moving target
+		}
+	}
+
+	if (!visible)
+		return;
+
+	if (!m_bMoving)
+	{
+		int cs = LookupSequence(g->anim);
+		if (cs >= 0 && pev->sequence != cs)
+		{
+			pev->sequence = cs;
+			pev->frame = 0;
+			ResetSequenceInfo();
+		}
+	}
+
+	if (melee)
+	{
+		if (dist < 72.0f && gpGlobals->time >= m_flNextMelee)
+		{
+			m_flNextMelee = gpGlobals->time + 1.0f;
+			PlayAnim("weapon_butt");
+			pl->TakeDamage(pev, pev, 15.0f, DMG_CLUB);
+		}
+		return;
+	}
+
+	if (m_bMoving && dist > 350.0f)
+		return; // runs first, shoots when standing
+
+	if (gpGlobals->time >= m_flNextShot)
+	{
+		if (m_burstLeft <= 0)
+			m_burstLeft = g->burst;
+
+		FireShot(pl);
+		m_burstLeft--;
+		m_flNextShot = gpGlobals->time + (m_burstLeft > 0 ? g->rate : RANDOM_FLOAT(g->pauseMin, g->pauseMax));
+	}
+}
 
 void CCZSoldier::Precache()
 {
@@ -308,6 +531,8 @@ void CCZSoldier::Precache()
 	PRECACHE_SOUND("t/t_coughc_am.wav");
 	if (Q_strstr(STRING(pev->classname), "terrorist"))
 	{
+		if (Soldier_FindGun(STRING(pev->classname))->sound)
+			PRECACHE_SOUND((char *)Soldier_FindGun(STRING(pev->classname))->sound);
 		static const char *keys[] = { "myeyes", "grenade", "damnsmoke", "coughc", "heyyou", "intrudov", "theretheya", "attack",
 			"pain1", "pain2", "pain3", "pain4", "death1", "death2", "death3", "death4" };
 		for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
@@ -596,6 +821,12 @@ void CCZSoldier::AnimThink()
 		// walking, scripted sequences, idle: the common actor code
 		CMonsterNPC::AnimThink();
 		CheckSeePlayer();
+		CombatThink();
+		if (m_flFlashOff > 0 && gpGlobals->time >= m_flFlashOff)
+		{
+			pev->effects &= ~EF_MUZZLEFLASH;
+			m_flFlashOff = 0;
+		}
 	}
 	else
 	{
@@ -736,6 +967,9 @@ BOOL CCZSoldier::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 		m_flNextPain = gpGlobals->time + 1.2f;
 		Soldier_VoiceN(this, "pain", 4);
 	}
+
+	if (pAttacker && pAttacker->IsPlayer())
+		m_bHurtByPlayer = 1;
 
 	if (m_trigCond == 2)
 		FireTrigger(pAttacker);
