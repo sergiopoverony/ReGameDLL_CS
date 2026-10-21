@@ -731,7 +731,33 @@ void CMonsterNPC::AnimThink()
 	}
 
 	if (m_bMoving)
+	{
 		MoveStep(0, false);
+
+		// patrol: round the corners - when the corner has no wait time, head for the next one before reaching it
+		if (m_bMoving && m_bPatrolOn && m_bPatrolHeading && !m_bFollow && !m_bScripted)
+		{
+			CBaseEntity *c = m_hPatrol;
+			if (c && c->GetDelay() <= 0.05f && !FStringNull(c->pev->target))
+			{
+				Vector dd = c->pev->origin - pev->origin;
+				dd.z = 0;
+				if (dd.Length() < 36.0f)
+				{
+					CBaseEntity *next = UTIL_FindEntityByTargetname(nullptr, STRING(c->pev->target));
+					if (next)
+					{
+						m_hPatrol = next;
+						m_vMoveTarget = next->pev->origin;
+						Vector nd = next->pev->origin - pev->origin;
+						m_flMoveYaw = UTIL_VecToYaw(Vector(nd.x, nd.y, 0));
+						BuildPath(m_vMoveTarget);
+						m_flProgTime = 0.0f;
+					}
+				}
+			}
+		}
+	}
 	else if (m_bFollow && !m_bScripted)
 		FollowStep();
 	else if (!m_bScripted && !m_bDead && !m_bNoPatrol)
