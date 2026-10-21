@@ -373,6 +373,16 @@ void CBaseDoor::Precache()
 	if (m_bLockedSound)
 	{
 		pszSound = ButtonSound(int(m_bLockedSound));
+		if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		{
+			// Condition Zero door lock sounds (doors, not buttons)
+			static const char *czLocked[] = { nullptr, "doors/door_wood_knob.wav", "doors/door_wood_locked1.wav", "doors/door_wood_shake1.wav",
+				"doors/door_metal_latch.wav", "doors/door_metal_shake1.wav", "doors/door_metal_shake2.wav", "doors/door_metal_locked1.wav",
+				"doors/door_metal_hit.wav", "doors/door_pneu_locked.wav", "doors/door_pneu_buzz.wav" };
+			int ls = int(m_bLockedSound);
+			if (ls >= 1 && ls <= 10)
+				pszSound = (char *)czLocked[ls];
+		}
 		PRECACHE_SOUND(pszSound);
 		m_ls.sLockedSound = ALLOC_STRING(pszSound);
 	}
