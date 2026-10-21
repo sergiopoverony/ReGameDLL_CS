@@ -974,11 +974,18 @@ void CCZToolPickup::Spawn()
 	}
 
 	SET_MODEL(ENT(pev), m_model);
-	pev->movetype = MOVETYPE_TOSS;
 	pev->solid = SOLID_TRIGGER;
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 16));
 	UTIL_SetOrigin(pev, pev->origin);
-	DROP_TO_FLOOR(ENT(pev));
+	if (m_bit == 0)
+	{
+		pev->movetype = MOVETYPE_NONE; // mines/radio lie exactly where the mapper put them (shelves)
+	}
+	else
+	{
+		pev->movetype = MOVETYPE_TOSS;
+		DROP_TO_FLOOR(ENT(pev));
+	}
 
 	SetTouch(&CCZToolPickup::PickupTouch);
 
