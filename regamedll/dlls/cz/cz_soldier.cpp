@@ -56,6 +56,7 @@ public:
 	float m_flNextSee = 0;
 	float m_flFadeStart = 0;
 	EHANDLE m_hPlat;
+	float m_flNextPain = 0;
 	Vector m_platOfs;
 };
 
@@ -295,6 +296,8 @@ void CCZSoldier::KeyValue(KeyValueData *pkvd)
 		CMonsterNPC::KeyValue(pkvd); // head, idleanim, usetarget, deathanim
 }
 
+static const char *Soldier_Wav(const char *classname, const char *key, char *buf, size_t sz);
+
 void CCZSoldier::Precache()
 {
 	PRECACHE_MODEL("models/seal.mdl");
@@ -303,6 +306,16 @@ void CCZSoldier::Precache()
 	PRECACHE_SOUND("ct/ct_incoming_am.wav");
 	PRECACHE_SOUND("ct/ct_damnsmoke_am.wav");
 	PRECACHE_SOUND("t/t_coughc_am.wav");
+	if (Q_strstr(STRING(pev->classname), "terrorist"))
+	{
+		static const char *keys[] = { "myeyes", "grenade", "damnsmoke", "coughc", "heyyou", "intrudov", "theretheya", "attack",
+			"pain1", "pain2", "pain3", "pain4", "death1", "death2", "death3", "death4" };
+		for (size_t i = 0; i < sizeof(keys) / sizeof(keys[0]); i++)
+		{
+			char buf[96];
+			PRECACHE_SOUND((char *)Soldier_Wav(STRING(pev->classname), keys[i], buf, sizeof(buf)));
+		}
+	}
 }
 
 void CCZSoldier::Spawn()
@@ -518,6 +531,37 @@ static void Soldier_Say(edict_t *pEdict, const char *file)
 	EMIT_SOUND_DYN2(pEdict, CHAN_VOICE, file, VOL_NORM, ATTN_NORM, 0, PITCH_NORM);
 }
 
+// voice lines: terrorists speak their own language (russian faction: _ru, others _am), SWAT/CT use ct_*_am
+static const char *Soldier_Wav(const char *classname, const char *key, char *buf, size_t sz)
+{
+	if (Q_strstr(classname, "terrorist"))
+	{
+		const char *lang = Q_strstr(classname, "russian") ? "ru" : "am";
+		const char *k = key;
+		if (!Q_strcmp(key, "blinded")) k = "myeyes";
+		else if (!Q_strcmp(key, "incoming")) k = "grenade";
+		Q_snprintf(buf, sz, "t/t_%s_%s.wav", k, lang);
+	}
+	else if (!Q_strcmp(key, "coughc"))
+		Q_snprintf(buf, sz, "t/t_coughc_am.wav");
+	else
+		Q_snprintf(buf, sz, "ct/ct_%s_am.wav", key);
+	return buf;
+}
+
+static void Soldier_Voice(CBaseEntity *e, const char *key)
+{
+	char buf[96];
+	Soldier_Say(e->edict(), Soldier_Wav(STRING(e->pev->classname), key, buf, sizeof(buf)));
+}
+
+static void Soldier_VoiceN(CBaseEntity *e, const char *base, int count)
+{
+	char key[48];
+	Q_snprintf(key, sizeof(key), "%s%d", base, RANDOM_LONG(1, count));
+	Soldier_Voice(e, key);
+}
+
 void CCZSoldier::React(int type)
 {
 	m_react = type;
@@ -526,14 +570,14 @@ void CCZSoldier::React(int type)
 	if (type == 1)
 	{
 		// flashbang: "blinded", twitching
-		Soldier_Say(edict(), "ct/ct_blinded_am.wav");
+		Soldier_Voice(this, "blinded");
 		PlayAnim("smflinch");
 		m_stepTime = gpGlobals->time + 6.0f;
 	}
 	else
 	{
 		// smoke: "Incoming!", cover the head, then "Damn, smoke!" and coughing
-		Soldier_Say(edict(), "ct/ct_incoming_am.wav");
+		Soldier_Voice(this, "incoming");
 		PlayAnim("cower");
 		m_stepTime = gpGlobals->time + 2.5f;
 	}
@@ -576,14 +620,14 @@ void CCZSoldier::AnimThink()
 			if (m_step == 0 && gpGlobals->time >= m_stepTime)
 			{
 				m_step = 1;
-				Soldier_Say(edict(), "ct/ct_damnsmoke_am.wav");
+				Soldier_Voice(this, "damnsmoke");
 				PlayAnim("choking");
 				m_stepTime = gpGlobals->time + 1.5f;
 			}
 			else if (m_step == 1 && gpGlobals->time >= m_stepTime)
 			{
 				m_step = 2;
-				Soldier_Say(edict(), "t/t_coughc_am.wav");
+				Soldier_Voice(this, "coughc");
 				m_stepTime = gpGlobals->time + 2.5f;
 			}
 			else if (m_step == 2 && gpGlobals->time >= m_stepTime)
@@ -668,6 +712,11 @@ void CCZSoldier::CheckSeePlayer()
 	if (tr.flFraction < 1.0f && tr.pHit != pl->edict())
 		return;
 
+	{
+		static const char *spot[] = { "heyyou", "intrudov", "theretheya", "attack" };
+		if (Q_strstr(STRING(pev->classname), "terrorist"))
+			Soldier_Voice(this, spot[RANDOM_LONG(0, 3)]);
+	}
 	FireTrigger(pl);
 }
 
@@ -681,6 +730,12 @@ BOOL CCZSoldier::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 		pev->health = 1.0f;
 
 	CBaseEntity *pAttacker = CBaseEntity::Instance(pevAttacker);
+
+	if (pev->health > 0.0f && gpGlobals->time >= m_flNextPain && Q_strstr(STRING(pev->classname), "terrorist"))
+	{
+		m_flNextPain = gpGlobals->time + 1.2f;
+		Soldier_VoiceN(this, "pain", 4);
+	}
 
 	if (m_trigCond == 2)
 		FireTrigger(pAttacker);
@@ -716,6 +771,9 @@ void CCZSoldier::Killed(entvars_t *pevAttacker, int iGib)
 	m_hPlat = nullptr;
 
 	CBaseEntity *pAttacker = CBaseEntity::Instance(pevAttacker);
+
+	if (Q_strstr(STRING(pev->classname), "terrorist"))
+		Soldier_VoiceN(this, "death", 4);
 
 	// death animation: the map's "deathanim", else by the side the shot came from
 	int seq = -1;
@@ -797,7 +855,7 @@ void Cz_GrenadeEvent(const Vector &origin, int type)
 		if (FNullEnt(pEnt->edict()) || !pEnt->pev->classname)
 			continue;
 
-		if (Q_strncmp(STRING(pEnt->pev->classname), "monster_ct_swat_", 16))
+		if (Q_strncmp(STRING(pEnt->pev->classname), "monster_ct_swat_", 16) && Q_strncmp(STRING(pEnt->pev->classname), "monster_terrorist_", 18))
 			continue;
 
 		static_cast<CCZSoldier *>(pEnt)->React(type);
