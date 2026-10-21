@@ -837,18 +837,55 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 	m_flProgTime = 0.0f;
 	m_bReplanned = false;
 
-	if (!PlaySeq(run ? "run" : "walk"))
 	{
-		// models without "walk"/"run" names (seal.mdl: patrol_street) are found by activity
-		int a = LookupActivity(run ? ACT_RUN : ACT_WALK);
-		if (a >= 0)
-		{
-			pev->sequence = a;
-			pev->frame = 0;
-			ResetSequenceInfo();
-		}
+		int found = -1;
+		const char *how = "";
+		if (PlaySeq(run ? "run" : "walk"))
+			how = "name";
 		else
-			PlaySeq("idle1");
+		{
+			int a = LookupActivity(run ? ACT_RUN : ACT_WALK);
+			if (a > 0 || (a == 0 && false))
+			{
+				found = a;
+				how = "activity";
+			}
+			else
+			{
+				// scan sequence names, then fall back to any sequence with real ground movement
+				studiohdr_t *hdr = (studiohdr_t *)GET_MODEL_PTR(ENT(pev));
+				if (hdr)
+				{
+					static const char *keys[2][3] = { { "walk", "patrol", "run" }, { "run", "sprint", "walk" } };
+					mstudioseqdesc_t *sd = (mstudioseqdesc_t *)((byte *)hdr + hdr->seqindex);
+					for (int k = 0; k < 3 && found < 0; k++)
+						for (int i = 0; i < hdr->numseq && found < 0; i++)
+						{
+							char low[40];
+							Q_strncpy(low, sd[i].label, sizeof(low) - 1);
+							low[sizeof(low) - 1] = 0;
+							for (char *p = low; *p; p++) *p = tolower((unsigned char)*p);
+							if (strstr(low, keys[run ? 1 : 0][k]) && sd[i].linearmovement.Length() > 0.0f)
+								found = i, how = "scan-name";
+						}
+					for (int i = 0; i < hdr->numseq && found < 0; i++)
+						if (sd[i].linearmovement.Length() > 10.0f && (sd[i].flags & STUDIO_LOOPING))
+							found = i, how = "scan-move";
+				}
+			}
+			if (found >= 0)
+			{
+				pev->sequence = found;
+				pev->frame = 0;
+				ResetSequenceInfo();
+			}
+			else
+				PlaySeq("idle1");
+		}
+		pev->framerate = 1.0f;
+		if (m_flFrameRate < 0.1f)
+			m_flFrameRate = 1.0f;
+		ALERT(at_console, "move anim: '%s' seq %d (%s) speed %.0f\n", STRING(pev->classname), pev->sequence, how, m_flGroundSpeed);
 	}
 
 	m_bSitting = false;
