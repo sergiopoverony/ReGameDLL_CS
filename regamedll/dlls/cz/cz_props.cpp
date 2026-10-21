@@ -98,12 +98,13 @@ void CItemGeneric::ApplySequence(const char *name)
 
 void CItemGeneric::Precache()
 {
-	if (m_iLightMul > 0)
+	// light *= iuser4 / 10 in the engine: values <= 10 would only darken the model, so they are ignored
+	if (m_iLightMul > 10)
 	{
 		pev->renderfx = kRenderFxLightMultiplier;
-		pev->iuser4 = m_iLightMul;
+		pev->iuser4 = 10 + m_iLightMul; // Xash: light *= iuser4/10, 10 = neutral
 		// iuser4 may not survive the entity delta: the multiplier also travels in renderamt (unused for rendermode normal)
-		pev->renderamt = m_iLightMul > 255 ? 255 : m_iLightMul;
+		pev->renderamt = (10 + m_iLightMul) > 255 ? 255 : (10 + m_iLightMul);
 	}
 	if (!FStringNull(pev->model))
 		PRECACHE_MODEL((char *)STRING(pev->model));
@@ -125,11 +126,11 @@ void CItemGeneric::Spawn()
 	pev->takedamage = DAMAGE_NO;
 
 	ALERT(at_console, "item_generic: spawn %s lightmul=%d\n", STRING(pev->model), m_iLightMul);
-	if (m_iLightMul > 0)
+	if (m_iLightMul > 10)
 	{
 		pev->renderfx = kRenderFxLightMultiplier;
-		pev->iuser4 = m_iLightMul;
-		pev->renderamt = m_iLightMul > 255 ? 255 : m_iLightMul;
+		pev->iuser4 = 10 + m_iLightMul; // Xash: light *= iuser4/10, 10 = neutral
+		pev->renderamt = (10 + m_iLightMul) > 255 ? 255 : (10 + m_iLightMul);
 		ALERT(at_console, "item_generic: %s lightmul=%d renderfx=%d renderamt=%.0f\n", STRING(pev->model), m_iLightMul, pev->renderfx, pev->renderamt);
 	}
 
