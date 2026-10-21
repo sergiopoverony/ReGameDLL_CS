@@ -598,6 +598,11 @@ void CCZSoldier::AnimThink()
 	}
 
 	CBaseEntity *plat = m_hPlat;
+	if (plat && plat->edict() == INDEXENT(0))
+	{
+		m_hPlat = nullptr; // old saves bound soldiers to worldspawn
+		plat = nullptr;
+	}
 	if (plat)
 	{
 		Vector want = plat->pev->origin + m_platOfs;

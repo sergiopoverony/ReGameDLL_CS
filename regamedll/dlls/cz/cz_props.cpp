@@ -984,15 +984,16 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	else
 		m_flBiasCur = 0.0f;
 
-	float ideal = (d > 1.0f) ? UTIL_VecToYaw(flat) + m_flBiasCur : m_flMoveYaw;
-	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, (m_flYawBias > 0.0f ? 140.0f : 540.0f) * dt);
+	float ideal = (d > (m_bPatrolHeading ? 12.0f : 1.0f)) ? UTIL_VecToYaw(flat) + m_flBiasCur : pev->angles.y;
+	pev->angles.y = UTIL_ApproachAngle(ideal, pev->angles.y, (m_flYawBias > 0.0f ? 140.0f : (m_bPatrolHeading ? 160.0f : 540.0f)) * dt);
 
 	if (finalLeg && (d <= stopDist || d <= step + 1.0f))
 	{
 		if (stopDist <= 0)
 		{
 			UTIL_SetOrigin(pev, Vector(m_vMoveTarget.x, m_vMoveTarget.y, pev->origin.z));
-			pev->angles.y = m_flMoveYaw;
+			if (!m_bPatrolHeading)
+				pev->angles.y = m_flMoveYaw; // patrol keeps its heading: no snap at the corners
 			m_bArrived = true;
 			StopMove();
 		}
