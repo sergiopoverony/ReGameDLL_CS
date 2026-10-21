@@ -882,6 +882,29 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 			else
 				PlaySeq("idle1");
 		}
+		{
+			// debugging aid: cz_walk_seq N forces a sequence index for every moving NPC
+			static cvar_t cvWalkSeq = { "cz_walk_seq", "-1", 0, -1.0f, nullptr };
+			static bool reg = false;
+			if (!reg) { CVAR_REGISTER(&cvWalkSeq); reg = true; }
+			int force = (int)CVAR_GET_FLOAT("cz_walk_seq");
+			studiohdr_t *hdr = (studiohdr_t *)GET_MODEL_PTR(ENT(pev));
+			if (hdr && force >= 0 && force < hdr->numseq)
+			{
+				pev->sequence = force;
+				pev->frame = 0;
+				ResetSequenceInfo();
+				how = "forced";
+			}
+			static int dumped = 0;
+			if (hdr && dumped != pev->modelindex)
+			{
+				dumped = pev->modelindex;
+				mstudioseqdesc_t *sd = (mstudioseqdesc_t *)((byte *)hdr + hdr->seqindex);
+				for (int i = 0; i < hdr->numseq; i++)
+					ALERT(at_console, "seqdump %s #%d '%s' act %d fps %.0f lin %.0f/%.0f flags %d\n", STRING(pev->model), i, sd[i].label, sd[i].activity, sd[i].fps, sd[i].linearmovement.x, sd[i].linearmovement.y, sd[i].flags);
+			}
+		}
 		pev->framerate = 1.0f;
 		if (m_flFrameRate < 0.1f)
 			m_flFrameRate = 1.0f;
