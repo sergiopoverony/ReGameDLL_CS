@@ -123,6 +123,14 @@ void CItemGeneric::Spawn()
 	pev->solid = SOLID_NOT;
 	pev->takedamage = DAMAGE_NO;
 
+	if (m_iLightMul > 0)
+	{
+		pev->renderfx = kRenderFxLightMultiplier;
+		pev->iuser4 = m_iLightMul;
+		pev->renderamt = m_iLightMul > 255 ? 255 : m_iLightMul;
+		ALERT(at_console, "item_generic: %s lightmul=%d renderfx=%d renderamt=%.0f\n", STRING(pev->model), m_iLightMul, pev->renderfx, pev->renderamt);
+	}
+
 	InitBoneControllers();
 	UTIL_SetOrigin(pev, pev->origin);
 
