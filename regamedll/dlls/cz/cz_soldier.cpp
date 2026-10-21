@@ -258,11 +258,36 @@ static const SoldierWeapon g_soldierWeapons[] =
 	{ "kamakazi",     8, "idle1" },
 };
 
+// terrorists (leet.mdl): bodygroup 2 = weapon (0 mp5, 1 shotgun, 2 law, 3 awm, 4 ak47, 5 glock, 6 machete, 7 m60, 8 tmp, 9 blank)
+static const SoldierWeapon g_terrorWeapons[] =
+{
+	{ "pistol",       5, "pistol_idle1" },
+	{ "smg",          8, "idle1" },
+	{ "mp5",          0, "idle1" },
+	{ "mp",           0, "idle1" },
+	{ "shotgun",      1, "idle1" },
+	{ "assaultrifle", 4, "idle1" },
+	{ "sniperrifle",  3, "idle1" },
+	{ "machinegun",   7, "idle1" },
+	{ "grenader",     2, "idle1" },
+	{ "law",          2, "idle1" },
+	{ "melee",        6, "machete_idle1" },
+	{ "kamakazi",     9, "idle1" },
+};
+
 static const SoldierWeapon *Soldier_FindWeapon(const char *classname)
 {
 	const char *p = Q_strrchr(classname, '_');
 	if (!p)
 		return &g_soldierWeapons[4];
+
+	if (Q_strstr(classname, "terrorist"))
+	{
+		for (const SoldierWeapon &w : g_terrorWeapons)
+			if (!Q_strcmp(p + 1, w.name))
+				return &w;
+		return &g_terrorWeapons[5];
+	}
 
 	for (const SoldierWeapon &w : g_soldierWeapons)
 	{
@@ -342,7 +367,7 @@ static const SoldierGun g_soldierGuns[] =
 	{ "machinegun",   7, 0.080f, 0.08f, 9, 1.0f, 1.8f, "weapons/m249-1.wav",        "combatidle" },
 	{ "grenader",     9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
 	{ "law",          9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
-	{ "melee",        0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "combatidle" },
+	{ "melee",        0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "machete_combatidle" },
 	{ "kamakazi",     0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "combatidle" },
 };
 
@@ -525,6 +550,9 @@ void CCZSoldier::Precache()
 {
 	PRECACHE_MODEL("models/seal.mdl");
 	PRECACHE_MODEL("models/terror.mdl");
+	PRECACHE_MODEL("models/leet.mdl");
+	if (!FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
+		PRECACHE_MODEL((char *)STRING(pev->model));
 	PRECACHE_SOUND("ct/ct_blinded_am.wav");
 	PRECACHE_SOUND("ct/ct_incoming_am.wav");
 	PRECACHE_SOUND("ct/ct_damnsmoke_am.wav");
@@ -549,7 +577,9 @@ void CCZSoldier::Spawn()
 
 	m_react = 0;
 	const bool isTerror = Q_strstr(STRING(pev->classname), "terrorist") != nullptr;
-	const char *mdl = isTerror ? "models/terror.mdl" : "models/seal.mdl";
+	const char *mdl = isTerror ? "models/leet.mdl" : "models/seal.mdl";
+	if (isTerror && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
+		mdl = "models/leet_lo.mdl"; // the mapper picked the low detail model
 	pev->model = MAKE_STRING(mdl);
 	SET_MODEL(ENT(pev), mdl);
 
@@ -566,7 +596,22 @@ void CCZSoldier::Spawn()
 	m_bNoPatrol = (m_cantMove != 0) || (pev->spawnflags & 128);
 	m_bHoldEnd = true;
 	m_spawned = 1;
-	pev->skin = isTerror ? 0 : (Q_strstr(STRING(pev->classname), "_swat_") ? 3 : 0); // SWAT uniform
+	if (isTerror)
+	{
+		// leet.mdl: 4 body skins; faction picks one (guess), the mapper's own "skin" wins
+		const char *cn = STRING(pev->classname);
+		int sk = 0;
+		if (Q_strstr(cn, "_arctic_") || Q_strstr(cn, "_russian_")) sk = 1;
+		else if (Q_strstr(cn, "_jungle_")) sk = 2;
+		else if (Q_strstr(cn, "_urban_") || Q_strstr(cn, "_asian_")) sk = 3;
+		if (pev->skin > 0 && pev->skin <= 3)
+			sk = pev->skin;
+		pev->skin = sk;
+		if (m_head == 0 && !Q_strstr(mdl, "_lo"))
+			m_head = RANDOM_LONG(0, 4); // 5 heads
+	}
+	else
+		pev->skin = Q_strstr(STRING(pev->classname), "_swat_") ? 3 : 0; // SWAT uniform
 
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72));
 	UTIL_SetOrigin(pev, pev->origin);
@@ -594,6 +639,8 @@ void CCZSoldier::Spawn()
 
 	SetBodygroup(1, m_head);
 	SetBodygroup(2, w->body);
+	if (isTerror && Q_strstr(STRING(pev->classname), "_kamakazi"))
+		SetBodygroup(3, 1); // bomb belt
 	m_flNextSee = gpGlobals->time + 1.0f;
 
 	int seq = LookupSequence(FStringNull(m_idleAnim) ? w->idle : STRING(m_idleAnim));

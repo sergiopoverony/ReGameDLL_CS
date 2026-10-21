@@ -175,6 +175,15 @@ void CFuncIllusionary::Spawn()
 
 	SET_MODEL(ENT(pev), STRING(pev->model));
 
+	// CZ:DS: dust / light beam volumes are almost transparent "texture" brushes (cz_recoil: lightbeams1, amt 20);
+	// Xash shows them as nothing, so draw them additive, with the amount scaled up
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && pev->rendermode == kRenderTransTexture && pev->renderamt > 0 && pev->renderamt <= 40)
+	{
+		pev->rendermode = kRenderTransAdd;
+		pev->renderamt = Q_min(255.0f, pev->renderamt * 6.0f);
+		ALERT(at_console, "illusionary haze '%s': additive amt %.0f\n", STRING(pev->model), pev->renderamt);
+	}
+
 	// I'd rather eat the network bandwidth of this than figure out how to save/restore
 	// these entities after they have been moved to the client, or respawn them ala Quake
 	// Perhaps we can do this in deathmatch only.
