@@ -974,6 +974,7 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 
 void CMonsterNPC::StopMove()
 {
+	m_flGhostUntil = 0.0f;
 	// arrived: leave the walk/run cycle (otherwise the actor keeps running on the spot)
 	if (m_bMoving && m_iMoveSeq >= 0 && pev->sequence == m_iMoveSeq && !m_bFollow && !m_bDead && !m_bAllowGhost)
 	{
@@ -1487,6 +1488,8 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (m_fMoveTo == 1 || m_fMoveTo == 2)
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
+		if (npc->m_bAllowGhost)
+			npc->m_flGhostUntil = gpGlobals->time + 40.0f; // scripted soldier: follow the node path without hull collision (dynamic props/walls)
 		// the red-shirt worker of cz_train01 walks the original routes (waypoints measured from the original demo)
 		npc->m_flYawBias = 0.0f;
 		if (FStrEq(STRING(npc->pev->targetname), "worker_walk1"))
