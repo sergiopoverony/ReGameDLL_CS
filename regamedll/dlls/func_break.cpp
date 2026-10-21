@@ -638,6 +638,13 @@ BOOL CBreakable::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 	if (!IsBreakable())
 		return FALSE;
 
+	// CZ:DS: range glass is bulletproof against grenades (HE/flash/smoke)
+	if (m_Material == matGlass && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3)
+		&& ((bitsDamageType & (DMG_BLAST | DMG_EXPLOSION)) || (pevInflictor && FClassnameIs(pevInflictor, "grenade"))))
+	{
+		return FALSE;
+	}
+
 	// Breakables take double damage from the crowbar
 	if (bitsDamageType & DMG_CLUB)
 	{
