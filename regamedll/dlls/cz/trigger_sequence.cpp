@@ -432,6 +432,17 @@ void CTriggerSequence::ExecuteSound(const czseq::Command &cmd)
 		// background chatter must stay audible through doors/walls: wide attenuation
 		// explicit origin: the speaker may be outside the player's PVS (behind a door) and the client would not know where it is
 		EMIT_AMBIENT_SOUND(ENT(pSpeaker->pev), pSpeaker->pev->origin + Vector(0, 0, 48), path.c_str(), VOL_NORM, 0.3f, 0, PITCH_NORM);
+		if (path.compare(0, 9, "ambience/") == 0)
+		{
+			// the chatter files are recorded very quietly: layer extra channels (cz_chatter_boost, 0..3 copies)
+			static bool reg = false;
+			static cvar_t cvBoost = { "cz_chatter_boost", "3", 0, 3.0f, nullptr };
+			if (!reg) { CVAR_REGISTER(&cvBoost); reg = true; }
+			int extra = (int)CVAR_GET_FLOAT("cz_chatter_boost");
+			static const int chans[3] = { CHAN_STATIC, CHAN_ITEM, CHAN_BODY };
+			for (int i = 0; i < extra && i < 3; i++)
+				EMIT_SOUND_DYN2(ENT(pSpeaker->pev), chans[i], path.c_str(), VOL_NORM, 0.3f, 0, PITCH_NORM);
+		}
 	}
 	else
 	{
