@@ -454,6 +454,7 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_flPatrolNext, FIELD_TIME),
 	DEFINE_FIELD(CMonsterNPC, m_flGhostUntil, FIELD_TIME),
 	DEFINE_FIELD(CMonsterNPC, m_flLiftApplied, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_iMoveSeq, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_bAllowGhost, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bBaseYawSet, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bReplanned, FIELD_CHARACTER),
@@ -929,6 +930,7 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 		pev->framerate = 1.0f;
 		if (m_flFrameRate < 0.1f)
 			m_flFrameRate = 1.0f;
+		m_iMoveSeq = pev->sequence;
 		ALERT(at_console, "move anim: '%s' seq %d (%s) speed %.0f\n", STRING(pev->classname), pev->sequence, how, m_flGroundSpeed);
 	}
 
@@ -943,6 +945,16 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 
 void CMonsterNPC::StopMove()
 {
+	// arrived: leave the walk/run cycle (otherwise the actor keeps running on the spot)
+	if (m_bMoving && m_iMoveSeq >= 0 && pev->sequence == m_iMoveSeq && !m_bFollow && !m_bDead)
+	{
+		m_iMoveSeq = -1;
+		if (!FStringNull(m_idleAnim))
+			ApplyIdle(STRING(m_idleAnim));
+		else if (!PlaySeq("idle1"))
+			PlaySeq("combatidle");
+	}
+
 	m_bMoving = false;
 	pev->movetype = MOVETYPE_NONE;
 	pev->velocity = g_vecZero;

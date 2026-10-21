@@ -60,6 +60,7 @@ public:
 	bool m_bPatrolInit = false, m_bPatrolOn = false, m_bPatrolHeading = false, m_bNoPatrol = false;
 	EHANDLE m_hPatrol;
 	float m_flPatrolNext = 0;
+	int m_iMoveSeq = -1; // walk/run sequence started by StartMove
 	float m_flLiftApplied = 0; // cz_npc_lift currently added to origin.z (soldiers)
 	float m_flGhostUntil = 0; // collision-free steps for a while after the hull got stuck
 	bool m_bAllowGhost = false; // soldiers: fall back to collision-free steps when boxed in
