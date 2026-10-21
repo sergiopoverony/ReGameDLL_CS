@@ -3685,7 +3685,7 @@ void EXT_FUNC InternalCommand(edict_t *pEntity, const char *pcmd, const char *pa
 			{
 				pPlayer->SmartRadio();
 			}
-			else if (FStrEq(pcmd, "noclip") && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+			else if (FStrEq(pcmd, "cz_noclip") && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
 			{
 				// CZ debug: noclip works on cz_ maps without sv_cheats
 				if (pPlayer->pev->movetype != MOVETYPE_NOCLIP)
