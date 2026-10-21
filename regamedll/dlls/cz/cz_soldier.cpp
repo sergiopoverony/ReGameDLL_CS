@@ -1,4 +1,5 @@
 #include "precompiled.h"
+#include "cz_npc.h"
 
 // CZ:DS soldiers (monster_<team>_<faction>_<weapon>).
 // First step: a static soldier with the right model, skin and weapon (the real AI comes later).
@@ -11,7 +12,7 @@ static cvar_t cz_grenade_react = { "cz_grenade_react_radius", "250", 0, 250.0f, 
 static bool g_czCageCvar = false;
 
 
-class CCZSoldier: public CBaseAnimating
+class CCZSoldier: public CMonsterNPC
 {
 public:
 	virtual int Save(CSave &save);
@@ -21,9 +22,14 @@ public:
 	virtual void Precache();
 	virtual void KeyValue(KeyValueData *pkvd);
 	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
+	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value) {}
+	virtual BOOL TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType);
+	virtual void Killed(entvars_t *pevAttacker, int iGib);
+	virtual int BloodColor() { return BLOOD_COLOR_RED; }
 
 public:
 	void EXPORT AnimThink();
+	void EXPORT DeadThink();
 	void PlayAnim(const char *name);
 	void Settle();
 	bool m_bPlatMoved;
@@ -31,13 +37,26 @@ public:
 	float m_flSettleAt = 0;
 	void StandOnFloor();
 	void React(int type); // 1 = flashbang, 2 = smoke grenade
+	void FireTrigger(CBaseEntity *pActivator);
+	void CheckSeePlayer();
 
-	int m_head;
-	EHANDLE m_hPlat;
-	Vector m_platOfs;
 	int m_react;
 	int m_step;
 	float m_stepTime;
+
+	// AI keys of the map (see cz.fgd)
+	string_t m_trigTarget;   // TriggerTarget
+	int m_trigCond = 0;      // TriggerCondition: 1 see player, 2 take damage, 3 half health, 4 death, 10/11 see player
+	string_t m_deathTrig;    // deathtrigger
+	int m_cantMove = 0;
+	int m_bInvuln = 0;
+	int m_bUnkillable = 0;
+	float m_flMaxHealth = 100;
+	bool m_bTrigFired = false;
+	float m_flNextSee = 0;
+	float m_flFadeStart = 0;
+	EHANDLE m_hPlat;
+	Vector m_platOfs;
 };
 
 TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
@@ -45,14 +64,23 @@ TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
 	DEFINE_FIELD(CCZSoldier, m_bPlatMoved, FIELD_CHARACTER),
 	DEFINE_FIELD(CCZSoldier, m_bMade, FIELD_CHARACTER),
 	DEFINE_FIELD(CCZSoldier, m_flSettleAt, FIELD_TIME),
-	DEFINE_FIELD(CCZSoldier, m_head, FIELD_INTEGER),
 	DEFINE_FIELD(CCZSoldier, m_hPlat, FIELD_EHANDLE),
 	DEFINE_FIELD(CCZSoldier, m_platOfs, FIELD_VECTOR),
 	DEFINE_FIELD(CCZSoldier, m_react, FIELD_INTEGER),
 	DEFINE_FIELD(CCZSoldier, m_step, FIELD_INTEGER),
 	DEFINE_FIELD(CCZSoldier, m_stepTime, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_trigTarget, FIELD_STRING),
+	DEFINE_FIELD(CCZSoldier, m_trigCond, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_deathTrig, FIELD_STRING),
+	DEFINE_FIELD(CCZSoldier, m_cantMove, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_bInvuln, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_bUnkillable, FIELD_INTEGER),
+	DEFINE_FIELD(CCZSoldier, m_flMaxHealth, FIELD_FLOAT),
+	DEFINE_FIELD(CCZSoldier, m_bTrigFired, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZSoldier, m_flNextSee, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flFadeStart, FIELD_TIME),
 };
-IMPLEMENT_SAVERESTORE(CCZSoldier, CBaseAnimating)
+IMPLEMENT_SAVERESTORE(CCZSoldier, CMonsterNPC)
 
 LINK_ENTITY_TO_CLASS(monster_ct_swat_pistol, CCZSoldier, CCSCzSoldier)
 LINK_ENTITY_TO_CLASS(monster_ct_swat_smg, CCZSoldier, CCSCzSoldier)
@@ -227,20 +255,44 @@ static const SoldierWeapon *Soldier_FindWeapon(const char *classname)
 
 void CCZSoldier::KeyValue(KeyValueData *pkvd)
 {
-	if (FStrEq(pkvd->szKeyName, "head"))
+	if (FStrEq(pkvd->szKeyName, "TriggerTarget"))
 	{
-		m_head = Q_atoi(pkvd->szValue);
+		m_trigTarget = ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
-	else if (FStrEq(pkvd->szKeyName, "cantmove") || FStrEq(pkvd->szKeyName, "usetarget")
-		|| FStrEq(pkvd->szKeyName, "TriggerTarget") || FStrEq(pkvd->szKeyName, "TriggerCondition")
-		|| FStrEq(pkvd->szKeyName, "alertradius") || FStrEq(pkvd->szKeyName, "alertable")
-		|| FStrEq(pkvd->szKeyName, "classtype"))
+	else if (FStrEq(pkvd->szKeyName, "TriggerCondition"))
 	{
-		pkvd->fHandled = TRUE; // AI keys, not used yet
+		m_trigCond = Q_atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "deathtrigger"))
+	{
+		m_deathTrig = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "cantmove"))
+	{
+		m_cantMove = Q_atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "invulnerable"))
+	{
+		m_bInvuln = Q_atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "unkillable"))
+	{
+		m_bUnkillable = Q_atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "alertradius") || FStrEq(pkvd->szKeyName, "alertable")
+		|| FStrEq(pkvd->szKeyName, "classtype") || FStrEq(pkvd->szKeyName, "weaponaccuracy")
+		|| FStrEq(pkvd->szKeyName, "healthmult") || FStrEq(pkvd->szKeyName, "language"))
+	{
+		pkvd->fHandled = TRUE; // combat AI keys, not used yet
 	}
 	else
-		CBaseAnimating::KeyValue(pkvd);
+		CMonsterNPC::KeyValue(pkvd); // head, idleanim, usetarget, deathanim
 }
 
 void CCZSoldier::Precache()
@@ -267,6 +319,13 @@ void CCZSoldier::Spawn()
 	pev->solid = SOLID_SLIDEBOX;
 	pev->takedamage = DAMAGE_NO;
 	pev->health = 100;
+	m_flMaxHealth = 100;
+	pev->flags |= FL_MONSTER;
+	pev->deadflag = DEAD_NO;
+	m_bDead = false;
+	m_bNoSit = true;
+	m_bHoldEnd = true;
+	m_spawned = 1;
 	pev->skin = isTerror ? 0 : (Q_strstr(STRING(pev->classname), "_swat_") ? 3 : 0); // SWAT uniform
 
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72));
@@ -286,14 +345,20 @@ void CCZSoldier::Spawn()
 	}
 	Settle();
 
+	if (!m_bMade && !m_bInvuln)
+		pev->takedamage = DAMAGE_AIM;
+
 	InitBoneControllers();
 
 	const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
 
 	SetBodygroup(1, m_head);
 	SetBodygroup(2, w->body);
+	m_flNextSee = gpGlobals->time + 1.0f;
 
-	int seq = LookupSequence(w->idle);
+	int seq = LookupSequence(FStringNull(m_idleAnim) ? w->idle : STRING(m_idleAnim));
+	if (seq < 0)
+		seq = LookupSequence(w->idle);
 	if (seq < 0)
 		seq = LookupSequence("combatidle");
 	if (seq < 0)
@@ -474,48 +539,60 @@ void CCZSoldier::React(int type)
 
 void CCZSoldier::AnimThink()
 {
-	StudioFrameAdvance();
+	if (m_bDead)
+	{
+		DeadThink();
+		return;
+	}
 
-	if (m_react == 1)
+	if (m_react == 0)
 	{
-		if (gpGlobals->time >= m_stepTime)
-		{
-			m_react = 0;
-			const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
-			PlayAnim(w->idle);
-		}
-		else if (m_fSequenceFinished)
-		{
-			static const char *flinch[] = { "smflinch", "leftarmflinch", "rightarmflinch", "leftlegsmflinch", "rightlegsmflinch" };
-			PlayAnim(flinch[RANDOM_LONG(0, 4)]);
-		}
+		// walking, scripted sequences, idle: the common actor code
+		CMonsterNPC::AnimThink();
+		CheckSeePlayer();
 	}
-	else if (m_react == 2)
+	else
 	{
-		if (m_step == 0 && gpGlobals->time >= m_stepTime)
+		StudioFrameAdvance();
+
+		if (m_react == 1)
 		{
-			m_step = 1;
-			Soldier_Say(edict(), "ct/ct_damnsmoke_am.wav");
-			PlayAnim("choking");
-			m_stepTime = gpGlobals->time + 1.5f;
+			if (gpGlobals->time >= m_stepTime)
+			{
+				m_react = 0;
+				const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
+				PlayAnim(FStringNull(m_idleAnim) ? w->idle : STRING(m_idleAnim));
+			}
+			else if (m_fSequenceFinished)
+			{
+				static const char *flinch[] = { "smflinch", "leftarmflinch", "rightarmflinch", "leftlegsmflinch", "rightlegsmflinch" };
+				PlayAnim(flinch[RANDOM_LONG(0, 4)]);
+			}
 		}
-		else if (m_step == 1 && gpGlobals->time >= m_stepTime)
+		else if (m_react == 2)
 		{
-			m_step = 2;
-			Soldier_Say(edict(), "t/t_coughc_am.wav");
-			m_stepTime = gpGlobals->time + 2.5f;
+			if (m_step == 0 && gpGlobals->time >= m_stepTime)
+			{
+				m_step = 1;
+				Soldier_Say(edict(), "ct/ct_damnsmoke_am.wav");
+				PlayAnim("choking");
+				m_stepTime = gpGlobals->time + 1.5f;
+			}
+			else if (m_step == 1 && gpGlobals->time >= m_stepTime)
+			{
+				m_step = 2;
+				Soldier_Say(edict(), "t/t_coughc_am.wav");
+				m_stepTime = gpGlobals->time + 2.5f;
+			}
+			else if (m_step == 2 && gpGlobals->time >= m_stepTime)
+			{
+				m_react = 0;
+				const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
+				PlayAnim(FStringNull(m_idleAnim) ? w->idle : STRING(m_idleAnim));
+			}
 		}
-		else if (m_step == 2 && gpGlobals->time >= m_stepTime)
-		{
-			m_react = 0;
-			const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
-			PlayAnim(w->idle);
-		}
-	}
-	else if (m_fSequenceFinished && !m_fSequenceLoops)
-	{
-		pev->frame = 0;
-		ResetSequenceInfo();
+
+		pev->nextthink = gpGlobals->time + 0.1f;
 	}
 
 	CBaseEntity *plat = m_hPlat;
@@ -539,10 +616,161 @@ void CCZSoldier::AnimThink()
 		}
 
 		pev->nextthink = gpGlobals->time + 0.02f;
+	}
+}
+
+// fires the map's TriggerTarget once
+void CCZSoldier::FireTrigger(CBaseEntity *pActivator)
+{
+	if (m_bTrigFired || FStringNull(m_trigTarget) || !STRING(m_trigTarget)[0])
 		return;
+
+	m_bTrigFired = true;
+	ALERT(at_console, "soldier '%s': TriggerCondition %d -> %s\n", STRING(pev->targetname), m_trigCond, STRING(m_trigTarget));
+	FireTargets(STRING(m_trigTarget), pActivator ? pActivator : this, this, USE_TOGGLE, 0);
+}
+
+// TriggerCondition 1/10/11: the soldier sees the player
+void CCZSoldier::CheckSeePlayer()
+{
+	if (m_bTrigFired || (m_trigCond != 1 && m_trigCond != 10 && m_trigCond != 11))
+		return;
+	if (pev->spawnflags & 128)
+		return; // WaitForScript
+	if (gpGlobals->time < m_flNextSee)
+		return;
+	m_flNextSee = gpGlobals->time + 0.2f;
+
+	CBasePlayer *pl = (CBasePlayer *)UTIL_PlayerByIndex(1);
+	if (!pl || !pl->IsAlive() || (pl->pev->flags & FL_NOTARGET))
+		return;
+
+	Vector eyes = pev->origin + Vector(0, 0, 64);
+	Vector to = pl->pev->origin + pl->pev->view_ofs - eyes;
+	if (to.Length() > 2048.0f)
+		return;
+
+	UTIL_MakeVectors(pev->angles);
+	Vector dir = to.Normalize();
+	if (DotProduct(dir, gpGlobals->v_forward) < 0.0f) // 180 degree view
+		return;
+
+	TraceResult tr;
+	UTIL_TraceLine(eyes, pl->pev->origin + pl->pev->view_ofs, ignore_monsters, ENT(pev), &tr);
+	if (tr.flFraction < 1.0f && tr.pHit != pl->edict())
+		return;
+
+	FireTrigger(pl);
+}
+
+BOOL CCZSoldier::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, float flDamage, int bitsDamageType)
+{
+	if (m_bDead || pev->takedamage == DAMAGE_NO || m_bInvuln)
+		return FALSE;
+
+	pev->health -= flDamage;
+	if (m_bUnkillable && pev->health < 1.0f)
+		pev->health = 1.0f;
+
+	CBaseEntity *pAttacker = CBaseEntity::Instance(pevAttacker);
+
+	if (m_trigCond == 2)
+		FireTrigger(pAttacker);
+	else if (m_trigCond == 3 && pev->health <= m_flMaxHealth * 0.5f)
+		FireTrigger(pAttacker);
+
+	if (pev->health <= 0.0f)
+	{
+		Killed(pevAttacker, GIB_NORMAL);
+		return TRUE;
 	}
 
-	pev->nextthink = gpGlobals->time + 0.1f;
+	return TRUE;
+}
+
+void CCZSoldier::Killed(entvars_t *pevAttacker, int iGib)
+{
+	if (m_bDead)
+		return;
+
+	m_bDead = true;
+	m_bScripted = false;
+	m_bFollow = false;
+	StopMove();
+	m_react = 0;
+	pev->deadflag = DEAD_DEAD;
+	pev->takedamage = DAMAGE_NO;
+	pev->solid = SOLID_NOT;
+	pev->movetype = MOVETYPE_NONE;
+	pev->velocity = g_vecZero;
+	pev->effects &= ~EF_NODRAW;
+	pev->health = 0;
+	m_hPlat = nullptr;
+
+	CBaseEntity *pAttacker = CBaseEntity::Instance(pevAttacker);
+
+	// death animation: the map's "deathanim", else by the side the shot came from
+	int seq = -1;
+	if (!FStringNull(m_deathAnim))
+		seq = LookupSequence(STRING(m_deathAnim));
+	if (seq < 0)
+	{
+		int act = ACT_DIESIMPLE;
+		if (pAttacker)
+		{
+			UTIL_MakeVectors(pev->angles);
+			Vector d = pAttacker->pev->origin - pev->origin;
+			d.z = 0;
+			if (d.Length() > 1.0f)
+				act = DotProduct(d.Normalize(), gpGlobals->v_forward) > 0.0f ? ACT_DIEBACKWARD : ACT_DIEFORWARD;
+		}
+		seq = LookupActivity(act);
+		if (seq < 0)
+			seq = LookupActivity(ACT_DIESIMPLE);
+	}
+	if (seq < 0)
+		seq = LookupSequence("die-simple");
+	if (seq < 0)
+		seq = 0;
+
+	pev->sequence = seq;
+	pev->frame = 0;
+	pev->framerate = 1.0f;
+	ResetSequenceInfo();
+	m_fSequenceLoops = FALSE;
+
+	EMIT_SOUND_DYN2(edict(), CHAN_VOICE, "common/null.wav", 0, ATTN_NORM, SND_STOP, PITCH_NORM);
+
+	// map events: TriggerCondition 4 = death, "deathtrigger"
+	if (m_trigCond == 4)
+		FireTrigger(pAttacker);
+	if (!FStringNull(m_deathTrig) && STRING(m_deathTrig)[0])
+		FireTargets(STRING(m_deathTrig), pAttacker ? pAttacker : this, this, USE_TOGGLE, 0);
+
+	if (pev->spawnflags & 512) // Fade Corpse
+		m_flFadeStart = gpGlobals->time + 10.0f;
+
+	SetThink(&CCZSoldier::AnimThink);
+	pev->nextthink = gpGlobals->time + 0.02f;
+}
+
+void CCZSoldier::DeadThink()
+{
+	StudioFrameAdvance();
+
+	if (m_flFadeStart > 0 && gpGlobals->time >= m_flFadeStart)
+	{
+		float t = (gpGlobals->time - m_flFadeStart) / 3.0f;
+		if (t >= 1.0f)
+		{
+			UTIL_Remove(this);
+			return;
+		}
+		pev->rendermode = kRenderTransTexture;
+		pev->renderamt = 255.0f * (1.0f - t);
+	}
+
+	pev->nextthink = gpGlobals->time + 0.05f;
 }
 
 // called from CGrenade: type 1 = flashbang exploded, 2 = smoke grenade exploded

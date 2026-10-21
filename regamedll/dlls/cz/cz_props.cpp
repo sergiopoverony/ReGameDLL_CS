@@ -1,4 +1,5 @@
 #include "precompiled.h"
+#include "cz_npc.h"
 
 // item_generic: animated decoration prop used all over the CZ:DS maps.
 // monster_npc : civilian / hostage style actor playing an idle animation,
@@ -424,65 +425,7 @@ static int Nav_FindPath(const Vector &from, const Vector &to, Vector *out, int m
 }
 
 // ---------------------------------------------------------------------------
-class CMonsterNPC: public CBaseAnimating
-{
-public:
-	virtual void Spawn();
-	virtual void Precache();
-	virtual void KeyValue(KeyValueData *pkvd);
-	virtual int Save(CSave &save);
-	virtual int Restore(CRestore &restore);
-	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() | FCAP_IMPULSE_USE); }
-	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
-
-public:
-	static TYPEDESCRIPTION m_SaveData[];
-
-	void ApplyIdle(const char *name);
-	void EXPORT AnimThink();
-	bool PlaySeq(const char *name);
-	void ApplySitOffset();
-	void StartMove(const Vector &target, float yaw, bool run);
-	void StopMove();
-	bool MoveStep(float stopDist, bool checkWalls);
-	void BuildPath(const Vector &goal);
-	void StartFollow(CBaseEntity *leader);
-	void StopFollow();
-	void FollowStep();
-
-	string_t m_idleAnim;
-	string_t m_useTarget;
-	string_t m_deathAnim;
-	bool m_bDead = false;
-	bool m_bDeadSwapped = false;
-	int m_head;
-	int m_spawned;
-	bool m_bScripted; // driven by scripted_sequence
-	bool m_bMoving;   // walking to m_vMoveTarget (scripted)
-	bool m_bArrived;
-	bool m_bFollow;   // follows the player after +use
-	bool m_bRun;
-	bool m_bSitting;
-	float m_flSitApplied;
-	float m_flMoveYaw;
-	float m_flBiasD0 = 0;
-	float m_flBiasCur = 0;
-	int m_nWalks = 0;
-	bool m_bGhost = false; // red-shirt worker: no collision of his own while walking
-	float m_flYawBias = 0; // original quirk: a scripted walk starts ~35 deg to the left of the goal and straightens out
-	float m_flLastMove;
-	float m_flStuckSince;
-	float m_flProgDist = 0, m_flProgTime = 0;
-	float m_flFaceUntil = 0, m_flBaseYaw = 0;
-	bool m_bBaseYawSet = false;
-	bool m_bReplanned = false;
-	Vector m_path[16]; // waypoints (info_node path); the last one is the goal
-	int m_nPath;
-	int m_iPath;
-	float m_flNextPath;
-	Vector m_vMoveTarget;
-	EHANDLE m_hLeader;
-};
+// (class CMonsterNPC lives in cz_npc.h)
 
 static cvar_t cz_npc_sit_offset = { "cz_npc_sit_offset", "3", 0, 3.0f, nullptr };
 static bool g_czNpcCvars = false;
@@ -505,6 +448,8 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_bGhost, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bBaseYawSet, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bReplanned, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bHoldEnd, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_bNoSit, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_flSitApplied, FIELD_FLOAT),
 	DEFINE_FIELD(CMonsterNPC, m_flMoveYaw, FIELD_FLOAT),
 	DEFINE_FIELD(CMonsterNPC, m_flBiasD0, FIELD_FLOAT),
@@ -620,7 +565,7 @@ void CMonsterNPC::ApplySitOffset()
 {
 	float mins[3], maxs[3];
 	m_bSitting = false;
-	if (ExtractBbox(pev->sequence, mins, maxs))
+	if (!m_bNoSit && ExtractBbox(pev->sequence, mins, maxs))
 		m_bSitting = (maxs[2] < 56.0f);
 
 	float want = m_bSitting ? CVAR_GET_FLOAT("cz_npc_sit_offset") : 0.0f;
@@ -765,7 +710,7 @@ void CMonsterNPC::AnimThink()
 		FollowStep();
 
 	// animations that are not flagged as looping stop at the last frame: restart them
-	if (m_fSequenceFinished && !m_fSequenceLoops && !m_bScripted && !m_bDead)
+	if (m_fSequenceFinished && !m_fSequenceLoops && !m_bScripted && !m_bDead && !m_bHoldEnd)
 	{
 		pev->frame = 0;
 		ResetSequenceInfo();
@@ -828,7 +773,18 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 	m_bReplanned = false;
 
 	if (!PlaySeq(run ? "run" : "walk"))
-		PlaySeq("idle1");
+	{
+		// models without "walk"/"run" names (seal.mdl: patrol_street) are found by activity
+		int a = LookupActivity(run ? ACT_RUN : ACT_WALK);
+		if (a >= 0)
+		{
+			pev->sequence = a;
+			pev->frame = 0;
+			ResetSequenceInfo();
+		}
+		else
+			PlaySeq("idle1");
+	}
 
 	m_bSitting = false;
 	ApplySitOffset();
@@ -1261,6 +1217,14 @@ void CCZScriptedSequence::AutoStart()
 	Use(nullptr, nullptr, USE_TOGGLE, 0);
 }
 
+bool Cz_IsSoldierClass(CBaseEntity *e)
+{
+	if (!e || !e->pev->classname)
+		return false;
+	const char *c = STRING(e->pev->classname);
+	return !Q_strncmp(c, "monster_ct_", 11) || !Q_strncmp(c, "monster_terrorist_", 18);
+}
+
 CMonsterNPC *CCZScriptedSequence::FindNPC()
 {
 	if (FStringNull(m_iszEntity))
@@ -1269,7 +1233,7 @@ CMonsterNPC *CCZScriptedSequence::FindNPC()
 	CBaseEntity *pEnt = nullptr;
 	while ((pEnt = UTIL_FindEntityByTargetname(pEnt, STRING(m_iszEntity))))
 	{
-		if (FClassnameIs(pEnt->pev, "monster_npc"))
+		if (FClassnameIs(pEnt->pev, "monster_npc") || Cz_IsSoldierClass(pEnt))
 			return static_cast<CMonsterNPC *>(pEnt);
 	}
 
