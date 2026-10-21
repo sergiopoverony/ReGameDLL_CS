@@ -1055,6 +1055,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	// walk with the engine's monster movement (stairs, ledges, collision with the real hull);
 	// if the straight direction is blocked try to steer around
 	Vector dir(flat.x / d, flat.y / d, 0);
+	Vector origin0 = pev->origin;
 	{
 		static const float angles[] = { 0, 25, -25, 50, -50, 75, -75, 100, -100 };
 		bool found = false;
@@ -1113,6 +1114,25 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		}
 
 		m_flStuckSince = 0.0f;
+	}
+
+	{
+		// WALK_MOVE "succeeded" but the actor did not really move (stuck in the floor/geometry): go ghost
+		Vector mv = pev->origin - origin0;
+		mv.z = 0;
+		bool stuck = mv.Length() < step * 0.3f;
+		static float nextLog = 0;
+		if (gpGlobals->time >= nextLog && (stuck || m_bAllowGhost))
+		{
+			nextLog = gpGlobals->time + 1.0f;
+			ALERT(at_console, "walk: '%s' org %.0f %.0f %.0f moved %.2f of %.2f goal %.0f %s\n", STRING(pev->classname),
+				pev->origin.x, pev->origin.y, pev->origin.z, mv.Length(), step, d, stuck ? "STUCK" : "ok");
+		}
+		if (stuck && m_bAllowGhost)
+		{
+			m_flGhostUntil = gpGlobals->time + 0.6f;
+			return false;
+		}
 	}
 
 	pev->flags |= FL_ONGROUND;
