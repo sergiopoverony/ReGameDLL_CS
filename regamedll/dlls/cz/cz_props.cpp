@@ -842,10 +842,13 @@ void CMonsterNPC::PatrolStep()
 		m_flPatrolNext = gpGlobals->time + wait + 0.05f;
 		if (!next)
 			m_bPatrolOn = false;
-		if (!FStringNull(m_idleAnim))
-			ApplyIdle(STRING(m_idleAnim));
-		else if (!PlaySeq("idle1"))
-			PlaySeq("combatidle");
+		if (wait > 0.3f)
+		{
+			if (!FStringNull(m_idleAnim))
+				ApplyIdle(STRING(m_idleAnim));
+			else if (!PlaySeq("idle1"))
+				PlaySeq("combatidle");
+		}
 		return;
 	}
 
@@ -972,7 +975,7 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 void CMonsterNPC::StopMove()
 {
 	// arrived: leave the walk/run cycle (otherwise the actor keeps running on the spot)
-	if (m_bMoving && m_iMoveSeq >= 0 && pev->sequence == m_iMoveSeq && !m_bFollow && !m_bDead)
+	if (m_bMoving && m_iMoveSeq >= 0 && pev->sequence == m_iMoveSeq && !m_bFollow && !m_bDead && !m_bAllowGhost)
 	{
 		m_iMoveSeq = -1;
 		if (!FStringNull(m_idleAnim))
