@@ -430,7 +430,8 @@ void CTriggerSequence::ExecuteSound(const czseq::Command &cmd)
 		ALERT(at_console, "sequence sound '%s' from '%s' dist %.0f\n", path.c_str(), STRING(pSpeaker->pev->targetname),
 			pl ? (pl->pev->origin - pSpeaker->pev->origin).Length() : -1.0f);
 		// background chatter must stay audible through doors/walls: wide attenuation
-		EMIT_SOUND_DYN2(ENT(pSpeaker->pev), CHAN_VOICE, path.c_str(), VOL_NORM, 0.3f, 0, PITCH_NORM);
+		// explicit origin: the speaker may be outside the player's PVS (behind a door) and the client would not know where it is
+		EMIT_AMBIENT_SOUND(ENT(pSpeaker->pev), pSpeaker->pev->origin + Vector(0, 0, 48), path.c_str(), VOL_NORM, 0.3f, 0, PITCH_NORM);
 	}
 	else
 	{
