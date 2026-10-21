@@ -898,12 +898,20 @@ IMPLEMENT_SAVERESTORE(CCZToolPickup, CBaseAnimating)
 LINK_ENTITY_TO_CLASS(weapon_camera, CCZToolPickup, CCSCzToolPickup)
 LINK_ENTITY_TO_CLASS(weapon_blowtorch, CCZToolPickup, CCSCzToolPickup)
 LINK_ENTITY_TO_CLASS(weapon_fiberopticcamera, CCZToolPickup, CCSCzToolPickup)
+LINK_ENTITY_TO_CLASS(weapon_radiocontrolledbomb, CCZToolPickup, CCSCzToolPickup)
+LINK_ENTITY_TO_CLASS(weapon_radio, CCZToolPickup, CCSCzToolPickup)
 
 void CCZToolPickup::Precache()
 {
 	PRECACHE_MODEL("models/w_camera.mdl");
 	PRECACHE_MODEL("models/w_btorch.mdl");
 	PRECACHE_MODEL("models/w_focamera.mdl");
+	PRECACHE_MODEL("models/w_rcontrolbomb.mdl");
+	{
+		int wl = 0;
+		byte *wf = LOAD_FILE_FOR_ME("models/w_radio.mdl", &wl);
+		if (wf) { FREE_FILE(wf); PRECACHE_MODEL("models/w_radio.mdl"); }
+	}
 	{
 		static const char *vm[] = { "models/v_camera.mdl", "models/v_btorch.mdl", "models/v_focamera.mdl" };
 		for (const char *m : vm)
@@ -939,6 +947,18 @@ void CCZToolPickup::Spawn()
 		m_bit = CZ_ICON_TORCH;
 		m_model = "models/w_btorch.mdl";
 		m_vmodel = "models/v_btorch.mdl";
+	}
+	else if (!Q_strcmp(cls, "weapon_radiocontrolledbomb") || !Q_strcmp(cls, "weapon_radio"))
+	{
+		m_bit = 0;
+		m_model = "models/w_rcontrolbomb.mdl";
+		if (!Q_strcmp(cls, "weapon_radio"))
+		{
+			int wl = 0;
+			byte *wf = LOAD_FILE_FOR_ME("models/w_radio.mdl", &wl);
+			if (wf) { FREE_FILE(wf); m_model = "models/w_radio.mdl"; }
+		}
+		m_vmodel = m_model;
 	}
 	else if (!Q_strcmp(cls, "weapon_fiberopticcamera"))
 	{
@@ -995,6 +1015,17 @@ void CCZToolPickup::PickupTouch(CBaseEntity *pOther)
 
 void CCZToolPickup::Pickup(CBaseEntity *pOther)
 {
+	if (m_bit == 0)
+	{
+		// radio / radio controlled mines lying in the world
+		if (Cz_GiveTool((CBasePlayer *)pOther, STRING(pev->classname)))
+		{
+			SetTouch(nullptr);
+			UTIL_Remove(this);
+		}
+		return;
+	}
+
 	g_czTools |= m_bit;
 
 	if (m_bit == CZ_ICON_TORCH && !UTIL_FindEntityByClassname(nullptr, "cz_torch_fx"))
