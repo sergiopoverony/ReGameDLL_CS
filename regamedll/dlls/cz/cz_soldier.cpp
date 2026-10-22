@@ -771,6 +771,14 @@ void CCZSoldier::Spawn()
 		}
 	}
 	Settle();
+	if (m_bMade && !m_hPlat)
+	{
+		// made in the open (not on the caged lift): an ordinary, solid, killable soldier
+		m_bMade = false;
+		pev->solid = SOLID_SLIDEBOX;
+		UTIL_SetOrigin(pev, pev->origin);
+		Settle();
+	}
 
 	if (!m_bMade && !m_bInvuln)
 		pev->takedamage = DAMAGE_AIM;
