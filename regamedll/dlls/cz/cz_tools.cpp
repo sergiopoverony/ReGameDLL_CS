@@ -37,13 +37,6 @@ static bool g_czSaveFix = false;
 static float g_rcUnstuck = 0;    // after a blast: push the player out of solids until then
 static float g_rcBusy = 0;       // switching mine/detonator: buttons ignored until then
 
-static void Cz_RegMineCvar()
-{
-	static cvar_t cvMineZ = { "cz_mine_z", "0", 0, 0.0f, nullptr };
-	static bool reg = false;
-	if (!reg) { CVAR_REGISTER(&cvMineZ); reg = true; }
-}
-
 static bool Cz_IsTraining()
 {
 	return Q_strncmp(STRING(gpGlobals->mapname), "cz_train", 8) == 0;
@@ -51,7 +44,6 @@ static bool Cz_IsTraining()
 
 static void Cz_ToolsNewMap()
 {
-	Cz_RegMineCvar();
 	if (Q_strcmp(g_czLastMap, STRING(gpGlobals->mapname)))
 	{
 		Q_strncpy(g_czLastMap, STRING(gpGlobals->mapname), sizeof(g_czLastMap) - 1);
@@ -1033,8 +1025,7 @@ void CCZToolPickup::Spawn()
 	if (m_bit == 0)
 	{
 		pev->movetype = MOVETYPE_NONE; // mines/radio lie exactly where the mapper put them (shelves)
-		pev->vuser1 = pev->origin;      // base position; cz_mine_z (temporary tuning cvar) is added live
-		Cz_RegMineCvar();
+		pev->vuser1 = pev->origin;      // base position; the shelf offset is applied in PickupThink
 	}
 	else
 	{
@@ -1056,7 +1047,7 @@ void CCZToolPickup::PickupThink()
 	if (m_bit == 0)
 	{
 		Vector o = pev->vuser1;
-		o.z += CVAR_GET_FLOAT("cz_mine_z");
+		o.z -= 16.0f; // the mine lies lower than the mapper's origin (value tuned by the user)
 		if (o.z != pev->origin.z)
 			UTIL_SetOrigin(pev, o);
 	}

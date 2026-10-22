@@ -41,6 +41,7 @@ public:
 	void CheckSeePlayer();
 	void CombatThink();
 	void FireShot(CBaseEntity *pl);
+	void OpenDoorAhead();
 
 	char m_combat = 0;       // 0 calm, 1 fighting the player
 	char m_bHurtByPlayer = 0;
@@ -49,9 +50,11 @@ public:
 	float m_flNextMelee = 0;
 	float m_flLastSeen = 0;
 	float m_flNextChase = 0;
+	float m_flNextDoor = 0;
 	float m_flFlashOff = 0;
 	EHANDLE m_hLaser;
 	Vector m_vLaserAim;
+	Vector m_vLaserDot;
 	float m_flLaserT = 0;
 	void LaserOff();
 
@@ -105,6 +108,7 @@ TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
 	DEFINE_FIELD(CCZSoldier, m_flFlashOff, FIELD_TIME),
 	DEFINE_FIELD(CCZSoldier, m_hLaser, FIELD_EHANDLE),
 	DEFINE_FIELD(CCZSoldier, m_vLaserAim, FIELD_VECTOR),
+	DEFINE_FIELD(CCZSoldier, m_vLaserDot, FIELD_VECTOR),
 	DEFINE_FIELD(CCZSoldier, m_flLaserT, FIELD_TIME),
 };
 IMPLEMENT_SAVERESTORE(CCZSoldier, CMonsterNPC)
@@ -507,23 +511,34 @@ void CCZSoldier::CombatThink()
 	}
 
 	// positioning: charge when the player is out of sight / too far, hold ground in view
-	float hold = melee ? 36.0f : 600.0f;
+	// melee: stop at 56, start again beyond 84 (hysteresis, no stop/start flicker at the edge)
+	float hold = melee ? 56.0f : 600.0f;
 	if (!m_cantMove)
 	{
-		bool want = melee ? (dist > 44.0f) : (!visible || dist > hold + 150.0f);
+		bool want = melee ? (dist > 84.0f) : (!visible || dist > hold + 150.0f);
 		if (want && !m_bMoving && gpGlobals->time >= m_flNextChase)
 		{
-			m_flNextChase = gpGlobals->time + (melee ? 0.25f : 0.8f);
+			m_flNextChase = gpGlobals->time + (melee ? 0.5f : 0.8f);
 			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true);
 		}
 		else if (m_bMoving && visible && dist < hold)
 			StopMove();
 		else if (m_bMoving && gpGlobals->time >= m_flNextChase)
 		{
-			m_flNextChase = gpGlobals->time + (melee ? 0.25f : 0.8f);
-			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true); // follow the moving target
+			// follow the moving target without restarting the walk (restarting every few ticks made the actor shake)
+			m_flNextChase = gpGlobals->time + (melee ? 0.5f : 0.8f);
+			m_vMoveTarget = pl->pev->origin;
+			m_flMoveYaw = UTIL_VecToYaw(Vector(to.x, to.y, 0));
+			if (m_iPath >= m_nPath || visible == false || (pl->pev->origin - pev->origin).Length() > 300.0f)
+				BuildPath(pl->pev->origin);
+			else
+				m_nPath = m_iPath; // close and visible: walk straight at the player
 		}
 	}
+
+	// closed door in the way: open it like the original soldiers do
+	if (m_bMoving)
+		OpenDoorAhead();
 
 	if (!visible)
 	{
@@ -563,10 +578,12 @@ void CCZSoldier::CombatThink()
 			UTIL_TraceLine(muzzle, muzzle + (m_vLaserAim - muzzle).Normalize() * 4096.0f, dont_ignore_monsters, ENT(pev), &ltr);
 			bm->SetStartPos(muzzle);
 			bm->SetEndPos(ltr.vecEndPos);
+			m_vLaserDot = ltr.vecEndPos + ltr.vecPlaneNormal * 2.0f; // dot sits where the sniper will shoot
 		}
-		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, muzzle);
+		Vector dotPos = bm ? m_vLaserDot : muzzle;
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, dotPos);
 			WRITE_BYTE(TE_SPRITE);
-			WRITE_COORD(muzzle.x); WRITE_COORD(muzzle.y); WRITE_COORD(muzzle.z);
+			WRITE_COORD(dotPos.x); WRITE_COORD(dotPos.y); WRITE_COORD(dotPos.z);
 			WRITE_SHORT(g_czLaserDot);
 			WRITE_BYTE(1);   // scale 0.1
 			WRITE_BYTE(200);
@@ -586,7 +603,7 @@ void CCZSoldier::CombatThink()
 
 	if (melee)
 	{
-		if (dist < 72.0f && gpGlobals->time >= m_flNextMelee)
+		if (dist < 80.0f && gpGlobals->time >= m_flNextMelee)
 		{
 			m_flNextMelee = gpGlobals->time + 1.0f;
 			PlayAnim("weapon_butt");
@@ -607,6 +624,32 @@ void CCZSoldier::CombatThink()
 		m_burstLeft--;
 		m_flNextShot = gpGlobals->time + (m_burstLeft > 0 ? g->rate : RANDOM_FLOAT(g->pauseMin, g->pauseMax));
 	}
+}
+
+void CCZSoldier::OpenDoorAhead()
+{
+	if (gpGlobals->time < m_flNextDoor)
+		return;
+	m_flNextDoor = gpGlobals->time + 0.3f;
+
+	float a = pev->angles.y * (M_PI / 180.0f);
+	Vector st = pev->origin + Vector(0, 0, 28);
+	Vector en = st + Vector(cos(a), sin(a), 0) * 84.0f;
+	TraceResult tr;
+	UTIL_TraceLine(st, en, ignore_monsters, ENT(pev), &tr);
+	if (tr.flFraction >= 1.0f || FNullEnt(tr.pHit))
+		return;
+
+	CBaseEntity *d = CBaseEntity::Instance(tr.pHit);
+	if (!d || !FClassnameIs(d->pev, "func_door"))
+		return;
+	if (d->pev->velocity.Length() > 1.0f)
+		return; // already moving
+	if (d->pev->solid == SOLID_NOT)
+		return;
+	if (!FStringNull(d->pev->targetname) && STRING(d->pev->targetname)[0] && !(d->pev->spawnflags & 256))
+		return; // opened by a trigger of the map only
+	d->Use(this, this, USE_ON, 1.0f);
 }
 
 void CCZSoldier::Precache()
