@@ -10621,7 +10621,10 @@ void CBasePlayer::DropPrimary()
 
 CBasePlayerItem *CBasePlayer::GetItemByName(const char *itemName) {
 	return ForEachItem([itemName](CBasePlayerItem *item) {
-		return FClassnameIs(item->pev, itemName);
+		if (FClassnameIs(item->pev, itemName))
+			return true;
+		// CZ: the radio-controlled mine entity is cz_weapon_rcbomb, but the HUD/select name is weapon_radiocontrolledbomb
+		return !Q_strcmp(itemName, "weapon_radiocontrolledbomb") && FClassnameIs(item->pev, "cz_weapon_rcbomb");
 	});
 }
 

@@ -411,6 +411,19 @@ void CCZSoldier::FireShot(CBaseEntity *pl)
 
 	UTIL_MakeVectors(pev->angles);
 	Vector src = pev->origin + Vector(0, 0, 60) + gpGlobals->v_forward * 16;
+	{
+		// the muzzle must not be behind a wall (soldier pressed against a corner): otherwise the shot starts on the other side
+		TraceResult mtr;
+		Vector eye = pev->origin + Vector(0, 0, 60);
+		UTIL_TraceLine(eye, src, ignore_monsters, ENT(pev), &mtr);
+		if (mtr.flFraction < 1.0f)
+			src = eye;
+		// no line of fire to the player: do not shoot at all
+		TraceResult vtr;
+		UTIL_TraceLine(src, pl->pev->origin + pl->pev->view_ofs * 0.6f, ignore_monsters, ENT(pev), &vtr);
+		if (vtr.flFraction < 1.0f && vtr.pHit != pl->edict())
+			return;
+	}
 	Vector aim = (pl->pev->origin + pl->pev->view_ofs * 0.6f - src).Normalize();
 	Vector dir = aim + gpGlobals->v_right * (RANDOM_FLOAT(-1, 1) * g->spread) + gpGlobals->v_up * (RANDOM_FLOAT(-1, 1) * g->spread);
 	dir = dir.Normalize();
