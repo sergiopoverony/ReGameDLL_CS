@@ -555,17 +555,7 @@ public:
 		SET_MODEL(ENT(pev), "models/w_rcontrolbomb_bomb.mdl");
 		pev->movetype = MOVETYPE_NONE;
 		pev->solid = SOLID_NOT;
-		pev->vuser1 = pev->origin; // base position; cz_mine_z is added live (temporary tuning cvar)
-		Cz_RegMineCvar();
-		SetThink(&CCZRcPlanted::TuneThink);
-		TuneThink();
-	}
-	void EXPORT TuneThink()
-	{
-		Vector o = pev->vuser1;
-		o.z += CVAR_GET_FLOAT("cz_mine_z");
-		UTIL_SetOrigin(pev, o);
-		pev->nextthink = gpGlobals->time + 0.2f;
+		UTIL_SetOrigin(pev, pev->origin);
 	}
 	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 };
@@ -1021,6 +1011,8 @@ void CCZToolPickup::Spawn()
 	if (m_bit == 0)
 	{
 		pev->movetype = MOVETYPE_NONE; // mines/radio lie exactly where the mapper put them (shelves)
+		pev->vuser1 = pev->origin;      // base position; cz_mine_z (temporary tuning cvar) is added live
+		Cz_RegMineCvar();
 	}
 	else
 	{
@@ -1039,6 +1031,13 @@ void CCZToolPickup::Spawn()
 
 void CCZToolPickup::PickupThink()
 {
+	if (m_bit == 0)
+	{
+		Vector o = pev->vuser1;
+		o.z += CVAR_GET_FLOAT("cz_mine_z");
+		if (o.z != pev->origin.z)
+			UTIL_SetOrigin(pev, o);
+	}
 	CBasePlayer *pl = Cz_Player();
 	if (pl && pl->IsAlive())
 	{
