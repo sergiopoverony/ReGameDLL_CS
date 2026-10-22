@@ -216,6 +216,7 @@ class CCSRcCtl: public CCSEntity {};
 class CCSLaws: public CCSPlayerWeapon {};
 class CCSRcWeapon: public CCSPlayerWeapon {};
 class CCSLawRocket: public CCSEntity {};
+class CCSEnvLiveAmmoShooter: public CCSDelay {};
 class CCSCzState: public CCSEntity {};
 class CCSCzInfoCamera: public CCSAnimating {};
 class CCSMissionFailure: public CCSDelay {};

@@ -332,3 +332,88 @@ void CTriggerObjective::ObjectiveUse(CBaseEntity *pActivator, CBaseEntity *pCall
 	ALERT(at_aiconsole, "objective %s state %d\n", STRING(m_objective), m_state);
 	SUB_UseTargets(this, USE_TOGGLE, 0);
 }
+
+// ---------------------------------------------------------------------------
+// env_liveammoshooter
+// On Use throws an active explosive (hegrenade / smokegrenade / flashgrenade /
+// lawrocket) from its origin towards the entity named by "target".
+// ---------------------------------------------------------------------------
+class CEnvLiveAmmoShooter: public CBaseDelay
+{
+public:
+	virtual int ObjectCaps() { return 0; }
+	virtual void KeyValue(KeyValueData *pkvd);
+	virtual void Spawn() { Precache(); }
+	virtual void Precache();
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	virtual void Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value);
+
+public:
+	static TYPEDESCRIPTION m_SaveData[];
+	string_t m_iszType;
+};
+
+TYPEDESCRIPTION CEnvLiveAmmoShooter::m_SaveData[] =
+{
+	DEFINE_FIELD(CEnvLiveAmmoShooter, m_iszType, FIELD_STRING),
+};
+
+LINK_ENTITY_TO_CLASS(env_liveammoshooter, CEnvLiveAmmoShooter, CCSEnvLiveAmmoShooter)
+IMPLEMENT_SAVERESTORE(CEnvLiveAmmoShooter, CBaseDelay)
+
+void CEnvLiveAmmoShooter::KeyValue(KeyValueData *pkvd)
+{
+	if (FStrEq("type", pkvd->szKeyName))
+	{
+		m_iszType = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CBaseDelay::KeyValue(pkvd);
+}
+
+void CEnvLiveAmmoShooter::Precache()
+{
+	PRECACHE_MODEL("models/w_hegrenade.mdl");
+	PRECACHE_MODEL("models/w_smokegrenade.mdl");
+	PRECACHE_MODEL("models/w_flashbang.mdl");
+	if (FStrEq(STRING(m_iszType), "lawrocket"))
+		UTIL_PrecacheOther("cz_law_rocket");
+}
+
+void CEnvLiveAmmoShooter::Use(CBaseEntity *, CBaseEntity *, USE_TYPE, float)
+{
+	CBaseEntity *pTarget = UTIL_FindEntityByTargetname(nullptr, STRING(pev->target));
+	if (!pTarget)
+		return;
+
+	Vector src = pev->origin;
+	Vector delta = pTarget->pev->origin - src;
+	const char *type = STRING(m_iszType);
+
+	if (FStrEq(type, "lawrocket"))
+	{
+		CBaseEntity *pRocket = CBaseEntity::Create("cz_law_rocket", src, UTIL_VecToAngles(delta), nullptr);
+		if (pRocket)
+			pRocket->pev->velocity = delta.Normalize() * 1500.0f;
+		return;
+	}
+
+	// lob the grenade: flight time T, velocity = delta / T + 0.5 * g * T
+	float T = delta.Length() / 600.0f;
+	if (T < 0.5f) T = 0.5f;
+	if (T > 2.5f) T = 2.5f;
+	float g = CVAR_GET_FLOAT("sv_gravity") * 0.55f;
+	Vector vel = delta * (1.0f / T);
+	vel.z += 0.5f * g * T;
+
+	ALERT(at_console, "env_liveammoshooter '%s': %s -> '%s'\n", STRING(pev->targetname), type, STRING(pev->target));
+
+	if (FStrEq(type, "smokegrenade"))
+		CGrenade::ShootSmokeGrenade(nullptr, src, vel, T + 0.2f, 0);
+	else if (FStrEq(type, "flashgrenade"))
+		CGrenade::ShootTimed(nullptr, src, vel, T + 0.2f);
+	else
+		CGrenade::ShootTimed2(nullptr, src, vel, T + 0.2f, 0, 0);
+}
