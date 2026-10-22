@@ -28,10 +28,10 @@
 
 #pragma once
 
-const int MAX_SENTENCE_NAME      = 16;
+const int MAX_SENTENCE_NAME      = 32;
 const int MAX_SENTENCE_VOXFILE   = 1536;	// Max number of sentences in game. NOTE: this must match CVOXFILESENTENCEMAX in engine\sound.h
 
-const int MAX_SENTENCE_GROUPS    = 200;		// Max number of sentence groups
+const int MAX_SENTENCE_GROUPS    = 1024;		// Max number of sentence groups
 const int MAX_SENTENCE_LRU       = 32;		// Max number of elements per sentence group
 const int MAX_SENTENCE_DPV_RESET = 27;		// Max number of dynamic pitch volumes
 
@@ -49,7 +49,7 @@ enum
 // group of related sentences
 struct sentenceg
 {
-	char szgroupname[16];
+	char szgroupname[MAX_SENTENCE_NAME];
 	int count;
 	unsigned char rgblru[MAX_SENTENCE_LRU];
 };

@@ -227,6 +227,14 @@ void CTriggerSequence::Resolve()
 	m_entry = g_seqLib.Find(m_fileName, m_entryName);
 }
 
+static std::string Seq_WithWav(const std::string &n)
+{
+	size_t d = n.rfind('.');
+	if (d != std::string::npos && d > n.rfind('/') + 1 && n.size() - d <= 5)
+		return n; // already has an extension
+	return n + ".wav";
+}
+
 void CTriggerSequence::Precache()
 {
 	if (!m_entry)
@@ -246,13 +254,13 @@ void CTriggerSequence::Precache()
 		{
 			for (size_t j = 0; j < group->size(); j++)
 			{
-				std::string wav = (*group)[j] + ".wav";
+				std::string wav = Seq_WithWav((*group)[j]);
 				PRECACHE_SOUND((char *)wav.c_str());
 			}
 		}
 		else
 		{
-			std::string wav = c.value + ".wav";
+			std::string wav = Seq_WithWav(c.value);
 			PRECACHE_SOUND((char *)wav.c_str());
 		}
 	}
@@ -417,7 +425,7 @@ void CTriggerSequence::ExecuteSound(const czseq::Command &cmd)
 {
 	std::string path;
 	const std::string *picked = g_seqLib.PickSentence(cmd.value);
-	path = (picked ? *picked : cmd.value) + ".wav";
+	path = Seq_WithWav(picked ? *picked : cmd.value);
 
 	CBaseEntity *pSpeaker = nullptr;
 	if (!cmd.mod.speaker.empty() && czseq::ToLower(cmd.mod.speaker) != "none")

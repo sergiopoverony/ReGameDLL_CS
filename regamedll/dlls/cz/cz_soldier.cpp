@@ -587,7 +587,7 @@ void CCZSoldier::CombatThink()
 	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam && g_czLaserDot)
 	{
 		UTIL_MakeVectors(pev->angles);
-		Vector muzzle = pev->origin + Vector(0, 0, 68) + gpGlobals->v_forward * 10; // laser sits on the head
+		Vector muzzle = pev->origin + Vector(0, 0, 46) + gpGlobals->v_forward * 10; // laser sits on the chest (height approximate, not measured)
 		CBeam *bm = (CBeam *)(CBaseEntity *)m_hLaser;
 		float dtL = gpGlobals->time - m_flLaserT;
 		m_flLaserT = gpGlobals->time;
