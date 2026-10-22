@@ -1117,6 +1117,20 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 			}
 		}
 
+		// combat soldiers may squeeze past door frames/props, but never through world walls
+		if (!m_bGhost && !m_bScripted)
+		{
+			TraceResult wt;
+			UTIL_TraceLine(pev->origin + Vector(0, 0, 36), Vector(np.x, np.y, pev->origin.z + 36), ignore_monsters, ENT(pev), &wt);
+			if (wt.flFraction < 1.0f)
+			{
+				m_flGhostUntil = 0.0f;
+				pev->velocity = Vector(0, 0, 1);
+				BuildPath(m_vMoveTarget);
+				return false;
+			}
+		}
+
 		// keep the same height above the floor as now, following the floor (steps included) under the new spot
 		TraceResult f0, f1;
 		UTIL_TraceLine(pev->origin + Vector(0, 0, 40), pev->origin - Vector(0, 0, 100), ignore_monsters, ENT(pev), &f0);
