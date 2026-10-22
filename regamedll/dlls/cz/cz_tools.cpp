@@ -542,7 +542,19 @@ public:
 		SET_MODEL(ENT(pev), "models/w_rcontrolbomb_bomb.mdl");
 		pev->movetype = MOVETYPE_NONE;
 		pev->solid = SOLID_NOT;
-		UTIL_SetOrigin(pev, pev->origin);
+		pev->vuser1 = pev->origin; // base position; cz_mine_z is added live (temporary tuning cvar)
+		static cvar_t cvMineZ = { "cz_mine_z", "0", 0, 0.0f, nullptr };
+		static bool reg = false;
+		if (!reg) { CVAR_REGISTER(&cvMineZ); reg = true; }
+		SetThink(&CCZRcPlanted::TuneThink);
+		TuneThink();
+	}
+	void EXPORT TuneThink()
+	{
+		Vector o = pev->vuser1;
+		o.z += CVAR_GET_FLOAT("cz_mine_z");
+		UTIL_SetOrigin(pev, o);
+		pev->nextthink = gpGlobals->time + 0.2f;
 	}
 	virtual int ObjectCaps() { return (CBaseAnimating::ObjectCaps() & ~FCAP_ACROSS_TRANSITION); }
 };
