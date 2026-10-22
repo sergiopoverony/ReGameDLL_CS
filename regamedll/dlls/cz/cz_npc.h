@@ -31,6 +31,8 @@ public:
 	string_t m_idleAnim;
 	string_t m_useTarget;
 	string_t m_deathAnim;
+	float m_flDeathAngle = 0.0f; // "deathangle": facing while the death animation plays
+	bool m_bHasDeathAngle = false;
 	bool m_bDead = false;
 	bool m_bDeadSwapped = false;
 	int m_head;

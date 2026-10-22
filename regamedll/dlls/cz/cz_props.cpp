@@ -485,6 +485,8 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_idleAnim, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_useTarget, FIELD_STRING),
 	DEFINE_FIELD(CMonsterNPC, m_deathAnim, FIELD_STRING),
+	DEFINE_FIELD(CMonsterNPC, m_flDeathAngle, FIELD_FLOAT),
+	DEFINE_FIELD(CMonsterNPC, m_bHasDeathAngle, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bDead, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bDeadSwapped, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_head, FIELD_INTEGER),
@@ -555,6 +557,12 @@ void CMonsterNPC::KeyValue(KeyValueData *pkvd)
 		m_deathAnim = ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if (FStrEq(pkvd->szKeyName, "deathangle"))
+	{
+		m_flDeathAngle = Q_atof(pkvd->szValue);
+		m_bHasDeathAngle = true;
+		pkvd->fHandled = TRUE;
+	}
 	else if (FStrEq(pkvd->szKeyName, "head"))
 	{
 		m_head = Q_atoi(pkvd->szValue);
@@ -567,7 +575,11 @@ void CMonsterNPC::KeyValue(KeyValueData *pkvd)
 // trigger_killtarget on a model with a death animation: play it and stay (damaged machinery, debris ...)
 bool Cz_KillGeneric(CBaseEntity *pEnt)
 {
-	if (!pEnt || !FClassnameIs(pEnt->pev, "monster_generic"))
+	if (!pEnt)
+		return false;
+	// monster_generic and soldiers (the helicopter crew in cz_recoil-intro) play their "deathanim" and stay
+	const char *cn = STRING(pEnt->pev->classname);
+	if (!FClassnameIs(pEnt->pev, "monster_generic") && Q_strncmp(cn, "monster_ct_", 11) && Q_strncmp(cn, "monster_terrorist_", 18))
 		return false;
 	CMonsterNPC *m = (CMonsterNPC *)pEnt;
 	if (FStringNull(m->m_deathAnim))
@@ -582,6 +594,8 @@ bool Cz_KillGeneric(CBaseEntity *pEnt)
 		ALERT(at_console, "monster_generic '%s': death anim '%s' NOT FOUND in model\n", STRING(m->pev->targetname), STRING(m->m_deathAnim));
 		return false;
 	}
+	if (m->m_bHasDeathAngle)
+		m->pev->angles.y = m->m_flDeathAngle;
 	m->m_bDead = true;
 	m->m_bScripted = false;
 	m->m_bMoving = false;

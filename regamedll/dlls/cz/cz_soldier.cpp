@@ -692,6 +692,8 @@ void CCZSoldier::OpenDoorAhead()
 void CCZSoldier::Precache()
 {
 	PRECACHE_MODEL("models/seal.mdl");
+	if (!FStringNull(pev->model) && Q_strstr(STRING(pev->model), "sealB"))
+		PRECACHE_MODEL("models/sealB.mdl");
 	PRECACHE_MODEL("models/terror.mdl");
 	PRECACHE_MODEL("models/leet.mdl");
 	if (Q_strstr(STRING(pev->classname), "sniperrifle"))
@@ -735,6 +737,9 @@ void CCZSoldier::Spawn()
 	const char *mdl = isTerror ? "models/leet.mdl" : "models/seal.mdl";
 	if (isTerror && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
 		mdl = "models/leet_lo.mdl"; // the mapper picked the low detail model
+	const bool sealB = !isTerror && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "sealB");
+	if (sealB)
+		mdl = "models/sealB.mdl"; // helicopter crew of cz_recoil-intro: body/skin are given by the map
 	pev->model = MAKE_STRING(mdl);
 	SET_MODEL(ENT(pev), mdl);
 
@@ -809,8 +814,11 @@ void CCZSoldier::Spawn()
 
 	const SoldierWeapon *w = Soldier_FindWeapon(STRING(pev->classname));
 
-	SetBodygroup(1, m_head);
-	SetBodygroup(2, w->body);
+	if (!sealB) // sealB: the mapper's raw "body" value stays
+	{
+		SetBodygroup(1, m_head);
+		SetBodygroup(2, w->body);
+	}
 	if (isTerror && Q_strstr(STRING(pev->classname), "_kamakazi"))
 		SetBodygroup(3, 1); // bomb belt
 	m_flNextSee = gpGlobals->time + 1.0f;
