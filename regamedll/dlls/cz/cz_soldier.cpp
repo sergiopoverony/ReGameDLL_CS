@@ -11,7 +11,16 @@ static cvar_t cz_cage_drop = { "cz_cage_drop", "100", 0, 100.0f, nullptr };
 static cvar_t cz_grenade_react = { "cz_grenade_react_radius", "250", 0, 250.0f, nullptr };
 static bool g_czCageCvar = false;
 // enemy damage multiplier: 1.0 = values in the gun table ("normal"); the recorded easy-difficulty demo matches ~0.25
-static cvar_t cz_enemy_damage = { "cz_enemy_damage", "0.25", 0, 0.25f, nullptr };
+static cvar_t cz_enemy_damage = { "cz_enemy_damage", "1", 0, 1.0f, nullptr }; // extra multiplier on top of the skill level
+static float Soldier_DmgScale()
+{
+	// skill 1 (easy) was measured in the recorded demo (~0.25 of the table); skill 2 = table (first demo); skill 3 is a guess
+	int sk = (int)CVAR_GET_FLOAT("skill");
+	float k = (sk <= 1) ? 0.25f : (sk == 2 ? 1.0f : 1.5f);
+	return k * cz_enemy_damage.value;
+}
+// aim cone multiplier (easy demo: enemies hit ~6% of pistol, ~20% of rifle, ~40% of sniper shots; shotgun at close range ~90%)
+static cvar_t cz_enemy_spread = { "cz_enemy_spread", "2.5", 0, 2.5f, nullptr };
 static bool g_czDmgCvar = false;
 
 
@@ -429,7 +438,8 @@ void CCZSoldier::FireShot(CBaseEntity *pl)
 			return;
 	}
 	Vector aim = (pl->pev->origin + pl->pev->view_ofs * 0.6f - src).Normalize();
-	Vector dir = aim + gpGlobals->v_right * (RANDOM_FLOAT(-1, 1) * g->spread) + gpGlobals->v_up * (RANDOM_FLOAT(-1, 1) * g->spread);
+	const float spr = g->spread * (Q_strstr(STRING(pev->classname), "shotgun") ? 1.0f : cz_enemy_spread.value);
+	Vector dir = aim + gpGlobals->v_right * (RANDOM_FLOAT(-1, 1) * spr) + gpGlobals->v_up * (RANDOM_FLOAT(-1, 1) * spr);
 	dir = dir.Normalize();
 
 	TraceResult tr;
@@ -450,7 +460,7 @@ void CCZSoldier::FireShot(CBaseEntity *pl)
 	if (hit && hit->pev->takedamage != DAMAGE_NO)
 	{
 		ClearMultiDamage();
-		hit->TraceAttack(pev, g->dmg * cz_enemy_damage.value, dir, &tr, DMG_BULLET | DMG_NEVERGIB);
+		hit->TraceAttack(pev, g->dmg * Soldier_DmgScale(), dir, &tr, DMG_BULLET | DMG_NEVERGIB);
 		ApplyMultiDamage(pev, pev);
 	}
 	else if (tr.flFraction < 1.0f)
@@ -577,7 +587,7 @@ void CCZSoldier::CombatThink()
 	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam && g_czLaserDot)
 	{
 		UTIL_MakeVectors(pev->angles);
-		Vector muzzle = pev->origin + Vector(0, 0, 58) + gpGlobals->v_forward * 20 + gpGlobals->v_right * 6;
+		Vector muzzle = pev->origin + Vector(0, 0, 68) + gpGlobals->v_forward * 10; // laser sits on the head
 		CBeam *bm = (CBeam *)(CBaseEntity *)m_hLaser;
 		float dtL = gpGlobals->time - m_flLaserT;
 		m_flLaserT = gpGlobals->time;
@@ -634,7 +644,7 @@ void CCZSoldier::CombatThink()
 		{
 			m_flNextMelee = gpGlobals->time + 1.0f;
 			PlayAnim("weapon_butt");
-			pl->TakeDamage(pev, pev, 15.0f * cz_enemy_damage.value * 2.0f, DMG_CLUB); // easy demo: machete hits of 1..7
+			pl->TakeDamage(pev, pev, 15.0f * Soldier_DmgScale() * 2.0f, DMG_CLUB); // easy demo: machete hits of 1..7
 		}
 		return;
 	}
@@ -716,6 +726,7 @@ void CCZSoldier::Spawn()
 	{
 		g_czDmgCvar = true;
 		CVAR_REGISTER(&cz_enemy_damage);
+		CVAR_REGISTER(&cz_enemy_spread);
 	}
 	Precache();
 
