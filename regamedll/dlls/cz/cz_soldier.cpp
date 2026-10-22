@@ -760,7 +760,7 @@ void CCZSoldier::Spawn()
 
 	m_hPlat = nullptr;
 	m_bPlatMoved = false;
-	m_bMade = g_czMakerSpawn;
+	m_bMade = g_czMakerSpawn && FStrEq(STRING(gpGlobals->mapname), "cz_train02"); // the cage soldier exists only in the training range
 	if (m_bMade)
 	{
 		pev->solid = SOLID_NOT; // the caged soldier is not solid
