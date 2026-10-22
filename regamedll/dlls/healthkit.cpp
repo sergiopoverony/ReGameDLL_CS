@@ -143,9 +143,10 @@ void CWallHealth::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 		// the wall has two medkits (two brushes): two single-press uses in total, each one empties one picture
 		int used = 0;
 		CBaseEntity *pe = nullptr;
+		Vector myCenter = (pev->absmin + pev->absmax) * 0.5f;
 		while ((pe = UTIL_FindEntityByClassname(pe, "func_healthcharger")) != nullptr)
-			if (pe->pev->frame != 0.0f)
-				used++;
+			if (pe->pev->frame != 0.0f && (((pe->pev->absmin + pe->pev->absmax) * 0.5f) - myCenter).Length() < 200.0f)
+				used++; // only the medkits of this wall (the map has several walls)
 
 		if (m_iCzUses >= 2 || (used >= 2) || !(pActivator->pev->weapons & (1 << WEAPON_SUIT)) || !pActivator->CanTakeHealth(1))
 		{
@@ -163,7 +164,7 @@ void CWallHealth::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE us
 		{
 			pe = nullptr;
 			while ((pe = UTIL_FindEntityByClassname(pe, "func_healthcharger")) != nullptr)
-				if (pe->pev->frame == 0.0f)
+				if (pe != this && pe->pev->frame == 0.0f && (((pe->pev->absmin + pe->pev->absmax) * 0.5f) - myCenter).Length() < 200.0f)
 				{
 					pe->pev->frame = 1.0f;
 					break;
