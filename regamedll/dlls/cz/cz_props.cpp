@@ -1594,6 +1594,45 @@ void CCZScriptedSequence::ScriptThink()
 void CCZScriptedSequence::Finish()
 {
 	CMonsterNPC *npc = (CMonsterNPC *)(CBaseEntity *)m_hNpc;
+	if (npc && m_state == 2)
+	{
+		// the animation carries the actor away from his mark (a roll behind a crate): keep him where it ended
+		// instead of snapping back to the start point
+		entvars_t *e = npc->pev;
+		Vector p0, p1, a;
+		float oldFrame = e->frame;
+		e->frame = 0;
+		GET_BONE_POSITION(ENT(e), 0, p0, a);
+		e->frame = 255;
+		GET_BONE_POSITION(ENT(e), 0, p1, a);
+		e->frame = oldFrame;
+		Vector d = p1 - p0;
+		d.z = 0;
+
+		studiohdr_t *hdr = (studiohdr_t *)GET_MODEL_PTR(ENT(e));
+		if (hdr && e->sequence >= 0 && e->sequence < hdr->numseq)
+		{
+			mstudioseqdesc_t *sd = (mstudioseqdesc_t *)((byte *)hdr + hdr->seqindex) + e->sequence;
+			if (sd->linearmovement.Length() > d.Length())
+			{
+				UTIL_MakeVectors(e->angles);
+				d = gpGlobals->v_forward * sd->linearmovement.x + gpGlobals->v_right * -sd->linearmovement.y;
+				d.z = 0;
+			}
+		}
+		if (d.Length() > 8.0f && d.Length() < 400.0f)
+		{
+			Vector np = e->origin + d;
+			TraceResult tr;
+			UTIL_TraceLine(e->origin + Vector(0, 0, 36), np + Vector(0, 0, 36), ignore_monsters, ENT(e), &tr);
+			if (tr.flFraction >= 1.0f)
+			{
+				UTIL_SetOrigin(e, np);
+				DROP_TO_FLOOR(ENT(e));
+				ALERT(at_console, "scripted_sequence '%s': actor moved %.0f units by the animation\n", STRING(pev->targetname), d.Length());
+			}
+		}
+	}
 	if (npc)
 	{
 		npc->m_bScripted = false;

@@ -484,7 +484,7 @@ void CCZSoldier::CombatThink()
 	bool melee = (g->dmg <= 0.0f);
 
 	// face the player
-	if (visible || dist < 300.0f)
+	if (!m_bMoving && (visible || dist < 300.0f))
 	{
 		float yaw = UTIL_VecToYaw(Vector(to.x, to.y, 0));
 		pev->angles.y = UTIL_ApproachAngle(yaw, pev->angles.y, 400.0f * 0.1f);
