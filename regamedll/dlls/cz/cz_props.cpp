@@ -1120,13 +1120,34 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		// combat soldiers may squeeze past door frames/props, but never through world walls
 		if (!m_bGhost && !m_bScripted)
 		{
+			if (m_flWallSince != 0.0f && gpGlobals->time - m_flWallSince > 3.0f)
+				m_flWallSince = 0.0f;
 			TraceResult wt;
 			UTIL_TraceLine(pev->origin + Vector(0, 0, 36), Vector(np.x, np.y, pev->origin.z + 36), ignore_monsters, ENT(pev), &wt);
 			if (wt.flFraction < 1.0f)
 			{
 				m_flGhostUntil = 0.0f;
 				pev->velocity = Vector(0, 0, 1);
-				BuildPath(m_vMoveTarget);
+				if (m_flWallSince == 0.0f)
+					m_flWallSince = gpGlobals->time;
+				else if (gpGlobals->time - m_flWallSince > 1.0f)
+				{
+					// path leads through a wall: hop to the next free waypoint (or give up on this one)
+					m_flWallSince = 0.0f;
+					if (!finalLeg)
+					{
+						TraceResult ht;
+						UTIL_TraceHull(m_path[m_iPath] + Vector(0, 0, 36), m_path[m_iPath] + Vector(0, 0, 36), ignore_monsters, human_hull, ENT(pev), &ht);
+						if (!ht.fStartSolid)
+						{
+							UTIL_SetOrigin(pev, m_path[m_iPath]);
+							DROP_TO_FLOOR(ENT(pev));
+						}
+						m_iPath++;
+					}
+					else
+						BuildPath(m_vMoveTarget);
+				}
 				return false;
 			}
 		}

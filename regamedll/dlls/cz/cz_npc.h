@@ -60,6 +60,7 @@ public:
 	bool m_bPatrolInit = false, m_bPatrolOn = false, m_bPatrolHeading = false, m_bNoPatrol = false;
 	EHANDLE m_hPatrol;
 	float m_flPatrolNext = 0;
+	float m_flWallSince = 0.0f; // combat ghost-walk blocked by a world wall since
 	int m_iMoveSeq = -1; // walk/run sequence started by StartMove
 	float m_flLiftApplied = 0; // cz_npc_lift currently added to origin.z (soldiers)
 	float m_flGhostUntil = 0; // collision-free steps for a while after the hull got stuck
