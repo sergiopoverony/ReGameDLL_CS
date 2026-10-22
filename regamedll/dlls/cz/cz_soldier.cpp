@@ -357,11 +357,11 @@ struct SoldierGun
 
 static const SoldierGun g_soldierGuns[] =
 {
-	{ "pistol",       8, 0.060f, 0.35f, 1, 0.5f, 1.0f, "weapons/usp_unsil-1.wav",   "pistol_combatidlle" },
-	{ "smg",          6, 0.070f, 0.09f, 5, 0.7f, 1.3f, "weapons/mac10-1.wav",       "combatidle" },
+	{ "pistol",       8, 0.060f, 0.35f, 1, 0.5f, 1.0f, "weapons/glock18-2.wav",      "pistol_combatidlle" },
+	{ "smg",          6, 0.070f, 0.09f, 5, 0.7f, 1.3f, "weapons/tmp-1.wav",          "combatidle" },
 	{ "mp5",          6, 0.055f, 0.09f, 5, 0.7f, 1.3f, "weapons/mp5-1.wav",         "combatidle" },
 	{ "mp",           6, 0.055f, 0.09f, 5, 0.7f, 1.3f, "weapons/mp5-1.wav",         "combatidle" },
-	{ "shotgun",     25, 0.090f, 1.20f, 1, 0.3f, 0.6f, "weapons/m3-1.wav",          "combatidle" },
+	{ "shotgun",     25, 0.090f, 1.20f, 1, 0.3f, 0.6f, "weapons/sbarrel1.wav",       "combatidle" },
 	{ "assaultrifle", 9, 0.045f, 0.10f, 4, 0.7f, 1.4f, "weapons/ak47-1.wav",        "combatidle" },
 	{ "sniperrifle", 40, 0.008f, 2.20f, 1, 0.5f, 1.0f, "weapons/awp1.wav",          "combatidle" },
 	{ "machinegun",   7, 0.080f, 0.08f, 9, 1.0f, 1.8f, "weapons/m249-1.wav",        "combatidle" },
@@ -608,7 +608,16 @@ void CCZSoldier::Spawn()
 			sk = pev->skin;
 		pev->skin = sk;
 		if (m_head == 0 && !Q_strstr(mdl, "_lo"))
-			m_head = RANDOM_LONG(0, 4); // 5 heads
+		{
+			// heads seen in the original demo (cz_recoil): pistol/melee 3 (sometimes 4), shotgun 1-2
+			const char *cw = STRING(pev->classname);
+			if (Q_strstr(cw, "_pistol") || Q_strstr(cw, "_melee"))
+				m_head = RANDOM_LONG(0, 5) == 0 ? 4 : 3;
+			else if (Q_strstr(cw, "_shotgun"))
+				m_head = RANDOM_LONG(1, 2);
+			else
+				m_head = RANDOM_LONG(0, 4); // 5 heads
+		}
 	}
 	else
 		pev->skin = Q_strstr(STRING(pev->classname), "_swat_") ? 3 : 0; // SWAT uniform
