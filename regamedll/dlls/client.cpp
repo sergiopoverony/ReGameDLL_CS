@@ -1,4 +1,5 @@
 #include "precompiled.h"
+void Cz_SelectTool(CBasePlayer *pl);
 
 int gmsgWeapPickup = 0;
 int gmsgHudText = 0;
@@ -3566,6 +3567,10 @@ void EXT_FUNC InternalCommand(edict_t *pEntity, const char *pcmd, const char *pa
 			else if (((pstr = Q_strstr(pcmd, "weapon_"))) && (pstr == pcmd))
 			{
 				GetClassPtr<CCSPlayer>((CBasePlayer *)pev)->SelectItem(pcmd);
+			}
+			else if (FStrEq(pcmd, "cz_tool"))
+			{
+				Cz_SelectTool(pPlayer);
 			}
 			else if (FStrEq(pcmd, "lastinv"))
 			{

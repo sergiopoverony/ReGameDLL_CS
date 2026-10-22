@@ -782,9 +782,26 @@ static void Cz_HolsterOrStrip(CBasePlayer *pl)
 	if (pl->m_pActiveItem)
 	{
 		pl->m_pActiveItem->Holster();
+		pl->m_pLastItem = pl->m_pActiveItem;
 		pl->m_pActiveItem = nullptr;
 	}
 	pl->pev->weaponmodel = 0;
+}
+
+// key 5: take the tool into the hands again (the other weapons stay in the inventory)
+void Cz_SelectTool(CBasePlayer *pl)
+{
+	if (!pl || !pl->IsAlive() || !g_czTools || Cz_IsTraining() || !pl->m_pActiveItem)
+		return;
+	const char *vm = nullptr;
+	int anim = 0;
+	if (g_czTools & CZ_ICON_RCBOMB) { vm = "models/v_rcontrolbomb.mdl"; anim = 2; }
+	else if (g_czTools & CZ_ICON_RADIO) { vm = "models/v_radio.mdl"; anim = 1; }
+	if (!vm)
+		return;
+	Cz_HolsterOrStrip(pl);
+	pl->pev->viewmodel = MAKE_STRING(vm);
+	Cz_WeapAnim(pl, anim);
 }
 
 // the bomb tool goes into the hands; everything else is taken away
@@ -894,7 +911,12 @@ void Cz_StripTools()
 			g_czZoneCnt[i] = 0;
 	Q_memset(g_tQ, 0, sizeof(g_tQ));
 	if (pl)
+	{
 		pl->pev->viewmodel = 0;
+		// missions: the weapon that was put aside comes back
+		if (!Cz_IsTraining() && !pl->m_pActiveItem && pl->m_pLastItem)
+			pl->SelectLastItem();
+	}
 	Cz_SendIcons(true);
 	Cz_SendTool();
 }
