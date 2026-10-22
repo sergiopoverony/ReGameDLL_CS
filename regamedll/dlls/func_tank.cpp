@@ -654,6 +654,15 @@ LINK_ENTITY_TO_CLASS(func_tank, CFuncTankGun, CCSFuncTankGun)
 
 void CFuncTankGun::Fire(const Vector &barrelEnd, const Vector &forward, entvars_t *pevAttacker)
 {
+	{
+		static float nextLog = 0.0f;
+		if (gpGlobals->time >= nextLog && !Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		{
+			nextLog = gpGlobals->time + 2.0f;
+			ALERT(at_console, "func_tank '%s' fire step (fireLast %.2f)\n", STRING(pev->targetname), m_fireLast);
+		}
+	}
+
 	if (m_fireLast != 0.0f)
 	{
 		// FireBullets needs gpGlobals->v_up, etc.

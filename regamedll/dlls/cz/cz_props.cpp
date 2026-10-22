@@ -542,7 +542,7 @@ void CMonsterNPC::KeyValue(KeyValueData *pkvd)
 		pkvd->fHandled = TRUE;
 
 		// trigger_changekeyvalue can switch the animation at run time
-		if (m_spawned)
+		if (m_spawned && !m_bDead) // a corpse keeps its death pose (the map's death trigger also switches idleanim)
 			ApplyIdle(pkvd->szValue);
 	}
 	else if (FStrEq(pkvd->szKeyName, "usetarget"))
