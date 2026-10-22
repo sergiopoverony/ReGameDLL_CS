@@ -609,6 +609,17 @@ void CGamePlayerEquip::EquipPlayer(CBaseEntity *pEntity)
 		if (Cz_GiveTool(pPlayer, STRING(m_weaponNames[i])))
 			continue;
 
+		if (!Q_strcmp(STRING(m_weaponNames[i]), "playerhealth"))
+		{
+			if (m_weaponCount[i] > 0)
+			{
+				pPlayer->pev->health = (float)m_weaponCount[i];
+				if (pPlayer->pev->health > pPlayer->pev->max_health && pPlayer->pev->max_health > 0)
+					pPlayer->pev->max_health = pPlayer->pev->health;
+			}
+			continue;
+		}
+
 		if (!Q_strcmp(STRING(m_weaponNames[i]), "nightvision"))
 		{
 			if (m_weaponCount[i] > 0)

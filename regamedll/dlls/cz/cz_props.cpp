@@ -243,6 +243,56 @@ void CItemGeneric::HideIfAppearTarget()
 		pev->nextthink = 0;
 }
 
+// monster_npc_dead: a corpse in a fixed pose (deadanim), head bodygroup from "head"
+class CNpcDead: public CItemGeneric
+{
+public:
+	virtual void Spawn();
+	virtual void KeyValue(KeyValueData *pkvd);
+	virtual int Save(CSave &save);
+	virtual int Restore(CRestore &restore);
+	static TYPEDESCRIPTION m_SaveData[];
+	int m_iHeadKey = 0;
+};
+
+TYPEDESCRIPTION CNpcDead::m_SaveData[] =
+{
+	DEFINE_FIELD(CNpcDead, m_iHeadKey, FIELD_INTEGER),
+};
+
+LINK_ENTITY_TO_CLASS(monster_npc_dead, CNpcDead, CCSNpcDead)
+IMPLEMENT_SAVERESTORE(CNpcDead, CItemGeneric)
+
+void CNpcDead::KeyValue(KeyValueData *pkvd)
+{
+	if (FStrEq(pkvd->szKeyName, "deadanim"))
+	{
+		m_sequenceName = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "head"))
+	{
+		m_iHeadKey = Q_atoi(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else
+		CItemGeneric::KeyValue(pkvd);
+}
+
+void CNpcDead::Spawn()
+{
+	if (FStringNull(pev->model))
+		pev->model = ALLOC_STRING("models/sealB.mdl");
+	if (FStringNull(m_sequenceName))
+		m_sequenceName = ALLOC_STRING("deadstomach");
+	CItemGeneric::Spawn();
+	SetBodygroup(1, m_iHeadKey);
+	m_bAnimated = false;
+	pev->nextthink = 0;
+	pev->framerate = 0.0f; // frozen on the dead pose
+	pev->frame = 0.0f; // FGD: the custom death pose is the first frame
+}
+
 void CItemGeneric::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value)
 {
 	if (m_removeOnUse)
@@ -1011,7 +1061,7 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	float d = flat.Length();
 	float step = m_flGroundSpeed * dt;
 
-	if (!finalLeg && d < 24.0f)
+	if (!finalLeg && d < (m_bAllowGhost ? 40.0f : 24.0f))
 	{
 		m_iPath++; // reached a waypoint: continue with the next one
 		return false;
@@ -1099,14 +1149,14 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		StopMove();
 		return true;
 	}
-	else if (gpGlobals->time - m_flProgTime > 1.2f)
+	else if (gpGlobals->time - m_flProgTime > (m_bAllowGhost ? 0.5f : 1.2f))
 	{
 		m_flProgTime = gpGlobals->time;
 		m_flProgDist = d;
 		if (m_bAllowGhost && !m_bScripted)
 		{
 			// soldier stuck (door frame, prop): squeeze through without collision for a moment instead of replanning/teleporting
-			m_flGhostUntil = gpGlobals->time + 1.2f;
+			m_flGhostUntil = gpGlobals->time + 1.6f;
 			return false;
 		}
 		if (!finalLeg)

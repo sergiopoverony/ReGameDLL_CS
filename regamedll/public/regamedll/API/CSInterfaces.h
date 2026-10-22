@@ -206,6 +206,7 @@ class CCSTriggerFreezePlayer: public CCSDelay {};
 class CCSTriggerKillTarget: public CCSDelay {};
 class CCSTriggerObjective: public CCSDelay {};
 class CCSItemGeneric: public CCSAnimating {};
+class CCSNpcDead: public CCSItemGeneric {};
 class CCSCzSoldier: public CCSAnimating {};
 class CCSMonsterMaker: public CCSDelay {};
 class CCSMonsterNPC: public CCSAnimating {};

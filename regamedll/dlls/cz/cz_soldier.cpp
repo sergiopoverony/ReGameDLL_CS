@@ -549,6 +549,15 @@ void CCZSoldier::CombatThink()
 		}
 	}
 
+	// after a melee swing the butt animation stays on screen: restore the run cycle while chasing
+	if (m_bMoving && m_iMoveSeq >= 0 && pev->sequence != m_iMoveSeq && gpGlobals->time >= m_flNextMelee - 0.2f)
+	{
+		pev->sequence = m_iMoveSeq;
+		pev->frame = 0;
+		ResetSequenceInfo();
+		pev->framerate = 1.0f;
+	}
+
 	// closed door in the way: open it like the original soldiers do
 	if (m_bMoving)
 		OpenDoorAhead();
