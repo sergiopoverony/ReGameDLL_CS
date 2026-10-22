@@ -16,7 +16,7 @@ static float Soldier_DmgScale()
 {
 	// skill 1 (easy) was measured in the recorded demo (~0.25 of the table); skill 2 = table (first demo); skill 3 is a guess
 	int sk = (int)CVAR_GET_FLOAT("skill");
-	float k = (sk <= 1) ? 0.25f : (sk == 2 ? 1.0f : 1.5f);
+	float k = (sk <= 1) ? 0.25f : (sk == 2 ? 0.40f : 0.62f); // easy/hard measured from demos; normal (0.40) is interpolated, not measured
 	return k * cz_enemy_damage.value;
 }
 // aim cone multiplier (easy demo: enemies hit ~6% of pistol, ~20% of rifle, ~40% of sniper shots; shotgun at close range ~90%)
