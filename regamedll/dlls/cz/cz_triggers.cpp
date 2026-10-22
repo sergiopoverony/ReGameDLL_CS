@@ -352,11 +352,13 @@ public:
 public:
 	static TYPEDESCRIPTION m_SaveData[];
 	string_t m_iszType;
+	int m_usEvent;
 };
 
 TYPEDESCRIPTION CEnvLiveAmmoShooter::m_SaveData[] =
 {
 	DEFINE_FIELD(CEnvLiveAmmoShooter, m_iszType, FIELD_STRING),
+	DEFINE_FIELD(CEnvLiveAmmoShooter, m_usEvent, FIELD_INTEGER),
 };
 
 LINK_ENTITY_TO_CLASS(env_liveammoshooter, CEnvLiveAmmoShooter, CCSEnvLiveAmmoShooter)
@@ -378,6 +380,11 @@ void CEnvLiveAmmoShooter::Precache()
 	PRECACHE_MODEL("models/w_hegrenade.mdl");
 	PRECACHE_MODEL("models/w_smokegrenade.mdl");
 	PRECACHE_MODEL("models/w_flashbang.mdl");
+	// the grenade code plays its smoke / explosion visuals through a client event
+	if (FStrEq(STRING(m_iszType), "smokegrenade"))
+		m_usEvent = PRECACHE_EVENT(1, "events/createsmoke.sc");
+	else if (FStrEq(STRING(m_iszType), "hegrenade"))
+		m_usEvent = PRECACHE_EVENT(1, "events/createexplo.sc");
 	if (FStrEq(STRING(m_iszType), "lawrocket"))
 		UTIL_PrecacheOther("cz_law_rocket");
 }
@@ -411,9 +418,9 @@ void CEnvLiveAmmoShooter::Use(CBaseEntity *, CBaseEntity *, USE_TYPE, float)
 	ALERT(at_console, "env_liveammoshooter '%s': %s -> '%s'\n", STRING(pev->targetname), type, STRING(pev->target));
 
 	if (FStrEq(type, "smokegrenade"))
-		CGrenade::ShootSmokeGrenade(nullptr, src, vel, T + 0.2f, 0);
+		CGrenade::ShootSmokeGrenade(nullptr, src, vel, T + 0.2f, (unsigned short)m_usEvent);
 	else if (FStrEq(type, "flashgrenade"))
 		CGrenade::ShootTimed(nullptr, src, vel, T + 0.2f);
 	else
-		CGrenade::ShootTimed2(nullptr, src, vel, T + 0.2f, 0, 0);
+		CGrenade::ShootTimed2(nullptr, src, vel, T + 0.2f, 0, (unsigned short)m_usEvent);
 }
