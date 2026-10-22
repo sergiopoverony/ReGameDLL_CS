@@ -6,11 +6,12 @@ static const char *CzAmmoModel(const char *cls)
 	if (Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
 		return "models/w_9mmclip.mdl";
 
+	// models taken from the original's precache list / entities (cz_recoil demo): ammo_556nato -> w_556nato, ammo_45acp -> w_45acp
 	const char *m = "models/w_9mmclip_big.mdl";
-	if (!Q_strcmp(cls, "ammo_556nato")) m = "models/w_556natobox.mdl";
-	else if (!Q_strcmp(cls, "ammo_556natobox")) m = "models/w_556natobox_big.mdl";
-	else if (!Q_strcmp(cls, "ammo_762nato")) m = "models/w_762natobox.mdl";
-	else if (!Q_strcmp(cls, "ammo_buckshot")) m = "models/w_shotbox_big.mdl";
+	if (!Q_strcmp(cls, "ammo_556nato")) m = "models/w_556nato.mdl";
+	else if (!Q_strcmp(cls, "ammo_45acp")) m = "models/w_45acp.mdl";
+	else if (!Q_strcmp(cls, "ammo_50ae")) m = "models/w_50ae_big.mdl";
+	else if (!Q_strcmp(cls, "ammo_556natobox")) m = "models/w_556nato_big.mdl";
 
 	int len = 0;
 	byte *f = LOAD_FILE_FOR_ME((char *)m, &len);

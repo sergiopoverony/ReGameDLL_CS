@@ -356,16 +356,32 @@ BOOL CItemLongJump::MyTouch(CBasePlayer *pPlayer)
 
 LINK_ENTITY_TO_CLASS(item_longjump, CItemLongJump, CCSItemLongJump)
 
+static const char *CzArmorModel()
+{
+	// the original (cz maps) uses w_armor.mdl for item_armor
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+	{
+		int len = 0;
+		byte *f = LOAD_FILE_FOR_ME((char *)"models/w_armor.mdl", &len);
+		if (f)
+		{
+			FREE_FILE(f);
+			return "models/w_armor.mdl";
+		}
+	}
+	return "models/w_kevlar.mdl";
+}
+
 void CItemKevlar::Spawn()
 {
 	Precache();
-	SET_MODEL(ENT(pev), "models/w_kevlar.mdl");
+	SET_MODEL(ENT(pev), CzArmorModel());
 	CItem::Spawn();
 }
 
 void CItemKevlar::Precache()
 {
-	PRECACHE_MODEL("models/w_kevlar.mdl");
+	PRECACHE_MODEL((char *)CzArmorModel());
 }
 
 BOOL CItemKevlar::MyTouch(CBasePlayer *pPlayer)
