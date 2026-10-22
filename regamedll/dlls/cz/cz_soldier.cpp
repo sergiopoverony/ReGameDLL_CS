@@ -1153,6 +1153,8 @@ BOOL CCZSoldier::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 	if (m_bDead || pev->takedamage == DAMAGE_NO || m_bInvuln)
 		return FALSE;
 
+	ALERT(at_aiconsole, "soldier '%s' damaged %.0f by %s (inflictor %s) type %d\n", STRING(pev->targetname), flDamage,
+		pevAttacker ? STRING(pevAttacker->classname) : "none", pevInflictor ? STRING(pevInflictor->classname) : "none", bitsDamageType);
 	pev->health -= flDamage;
 	if (m_bUnkillable && pev->health < 1.0f)
 		pev->health = 1.0f;
