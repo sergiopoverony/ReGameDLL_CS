@@ -49,7 +49,8 @@ void CFuncTank::Spawn()
 
 	// so it doesn't get pushed by anything
 	pev->movetype = MOVETYPE_PUSH;
-	pev->solid = SOLID_BSP;
+	// studio-model turrets (CZ maps) must not be SOLID_BSP: engine aborts when traced
+	pev->solid = (STRING(pev->model)[0] == '*') ? SOLID_BSP : SOLID_NOT;
 	SET_MODEL(ENT(pev), STRING(pev->model));
 
 	m_yawCenter = pev->angles.y;
