@@ -727,10 +727,11 @@ void CTriggerCDAudio::PlayTrack(edict_t *pEdict)
 			{
 				if (g_pFileSystem->FileExists(UTIL_VarArgs("%s.mp3", path)))
 					Q_strcat(path, ".mp3");
-				else
+				else if (g_pFileSystem->FileExists(UTIL_VarArgs("%s.wav", path)))
 					Q_strcat(path, ".wav");
+				// else: no extension, the engine looks it up itself (like the original "mp3 play")
 			}
-
+			ALERT(at_console, "trigger_cdaudio: music '%s'\n", path);
 			bool loop = false; // CZ:DS tracks play once
 			CLIENT_COMMAND(pEdict, UTIL_VarArgs("music \"%s\" \"%s\"\n", path, loop ? path : "*"));
 		}
