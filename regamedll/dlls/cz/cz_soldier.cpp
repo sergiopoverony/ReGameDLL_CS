@@ -507,7 +507,8 @@ void CCZSoldier::CombatThink()
 		m_flNextShot = gpGlobals->time + RANDOM_FLOAT(0.3f, 0.7f);
 		static const char *spot[] = { "heyyou", "intrudov", "theretheya", "attack" };
 		Soldier_Voice(this, spot[RANDOM_LONG(0, 3)]);
-		FireTrigger(pl);
+		if (m_trigCond == 1 || m_trigCond == 10 || m_trigCond == 11)
+			FireTrigger(pl);
 	}
 
 	if (visible)
