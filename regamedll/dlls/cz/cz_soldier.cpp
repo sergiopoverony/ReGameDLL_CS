@@ -390,6 +390,8 @@ static bool Soldier_IsHostile(entvars_t *pev)
 	return Q_strncmp(STRING(gpGlobals->mapname), "cz_train", 8) != 0; // the training is scripted: nobody shoots
 }
 
+static int g_czLaserBeam = 0, g_czLaserDot = 0;
+
 void CCZSoldier::FireShot(CBaseEntity *pl)
 {
 	const SoldierGun *g = Soldier_FindGun(STRING(pev->classname));
@@ -510,6 +512,35 @@ void CCZSoldier::CombatThink()
 	if (!visible)
 		return;
 
+	// sniper laser sight: red dot on the rifle, beam to the player (as in the original)
+	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam && g_czLaserDot)
+	{
+		UTIL_MakeVectors(pev->angles);
+		Vector muzzle = pev->origin + Vector(0, 0, 58) + gpGlobals->v_forward * 20 + gpGlobals->v_right * 6;
+		TraceResult ltr;
+		UTIL_TraceLine(muzzle, target, dont_ignore_monsters, ENT(pev), &ltr);
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, muzzle);
+			WRITE_BYTE(TE_BEAMPOINTS);
+			WRITE_COORD(muzzle.x); WRITE_COORD(muzzle.y); WRITE_COORD(muzzle.z);
+			WRITE_COORD(ltr.vecEndPos.x); WRITE_COORD(ltr.vecEndPos.y); WRITE_COORD(ltr.vecEndPos.z);
+			WRITE_SHORT(g_czLaserBeam);
+			WRITE_BYTE(0); WRITE_BYTE(0);
+			WRITE_BYTE(2);   // life, 0.1 s
+			WRITE_BYTE(3);   // width
+			WRITE_BYTE(0);   // noise
+			WRITE_BYTE(255); WRITE_BYTE(0); WRITE_BYTE(0);
+			WRITE_BYTE(140); // brightness
+			WRITE_BYTE(0);
+		MESSAGE_END();
+		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, muzzle);
+			WRITE_BYTE(TE_SPRITE);
+			WRITE_COORD(muzzle.x); WRITE_COORD(muzzle.y); WRITE_COORD(muzzle.z);
+			WRITE_SHORT(g_czLaserDot);
+			WRITE_BYTE(1);   // scale 0.1
+			WRITE_BYTE(200);
+		MESSAGE_END();
+	}
+
 	if (!m_bMoving)
 	{
 		int cs = LookupSequence(g->anim);
@@ -551,6 +582,11 @@ void CCZSoldier::Precache()
 	PRECACHE_MODEL("models/seal.mdl");
 	PRECACHE_MODEL("models/terror.mdl");
 	PRECACHE_MODEL("models/leet.mdl");
+	if (Q_strstr(STRING(pev->classname), "sniperrifle"))
+	{
+		g_czLaserBeam = PRECACHE_MODEL("sprites/laserbeam.spr");
+		g_czLaserDot = PRECACHE_MODEL("sprites/laserdot.spr");
+	}
 	if (!FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
 		PRECACHE_MODEL((char *)STRING(pev->model));
 	PRECACHE_SOUND("ct/ct_blinded_am.wav");
