@@ -689,6 +689,12 @@ void CMonsterNPC::AnimThink()
 {
 	StudioFrameAdvance();
 
+	if (pev->iuser3 == 77 && gpGlobals->time >= pev->fuser3)
+	{
+		pev->iuser3 = 0;
+		pev->effects &= ~EF_NOINTERP;
+	}
+
 	// live tuning: cz_npc_lift raises every soldier by N units (for models that sink into the floor)
 	if (m_bAllowGhost)
 	{
@@ -1097,6 +1103,12 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	{
 		m_flProgTime = gpGlobals->time;
 		m_flProgDist = d;
+		if (m_bAllowGhost && !m_bScripted)
+		{
+			// soldier stuck (door frame, prop): squeeze through without collision for a moment instead of replanning/teleporting
+			m_flGhostUntil = gpGlobals->time + 1.2f;
+			return false;
+		}
 		if (!finalLeg)
 			m_iPath++;               // give up this waypoint
 		else if (stopDist <= 0 && !m_bReplanned)
@@ -1627,8 +1639,14 @@ void CCZScriptedSequence::Finish()
 			UTIL_TraceLine(e->origin + Vector(0, 0, 36), np + Vector(0, 0, 36), ignore_monsters, ENT(e), &tr);
 			if (tr.flFraction >= 1.0f)
 			{
+				TraceResult fl;
+				UTIL_TraceLine(np + Vector(0, 0, 24), np - Vector(0, 0, 64), ignore_monsters, ENT(e), &fl);
+				if (fl.flFraction < 1.0f && !fl.fStartSolid)
+					np.z = fl.vecEndPos.z - e->mins.z;
 				UTIL_SetOrigin(e, np);
-				DROP_TO_FLOOR(ENT(e));
+				e->effects |= EF_NOINTERP; // no sliding/blinking between the old and the new spot
+				e->iuser3 = 77;
+				e->fuser3 = gpGlobals->time + 0.3f;
 				ALERT(at_console, "scripted_sequence '%s': actor moved %.0f units by the animation\n", STRING(pev->targetname), d.Length());
 			}
 		}

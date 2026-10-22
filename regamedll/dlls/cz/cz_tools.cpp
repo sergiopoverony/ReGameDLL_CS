@@ -37,8 +37,21 @@ static bool g_czSaveFix = false;
 static float g_rcUnstuck = 0;    // after a blast: push the player out of solids until then
 static float g_rcBusy = 0;       // switching mine/detonator: buttons ignored until then
 
+static void Cz_RegMineCvar()
+{
+	static cvar_t cvMineZ = { "cz_mine_z", "0", 0, 0.0f, nullptr };
+	static bool reg = false;
+	if (!reg) { CVAR_REGISTER(&cvMineZ); reg = true; }
+}
+
+static bool Cz_IsTraining()
+{
+	return Q_strncmp(STRING(gpGlobals->mapname), "cz_train", 8) == 0;
+}
+
 static void Cz_ToolsNewMap()
 {
+	Cz_RegMineCvar();
 	if (Q_strcmp(g_czLastMap, STRING(gpGlobals->mapname)))
 	{
 		Q_strncpy(g_czLastMap, STRING(gpGlobals->mapname), sizeof(g_czLastMap) - 1);
@@ -543,9 +556,7 @@ public:
 		pev->movetype = MOVETYPE_NONE;
 		pev->solid = SOLID_NOT;
 		pev->vuser1 = pev->origin; // base position; cz_mine_z is added live (temporary tuning cvar)
-		static cvar_t cvMineZ = { "cz_mine_z", "0", 0, 0.0f, nullptr };
-		static bool reg = false;
-		if (!reg) { CVAR_REGISTER(&cvMineZ); reg = true; }
+		Cz_RegMineCvar();
 		SetThink(&CCZRcPlanted::TuneThink);
 		TuneThink();
 	}
@@ -613,6 +624,8 @@ void CCZRcCtl::CtlThink()
 	bool edge2 = atk2 && !m_prev2;
 	m_prev2 = atk2;
 	float now = gpGlobals->time;
+	if (!Cz_IsTraining() && pl->m_pActiveItem)
+		edge = edge2 = false; // a real weapon is in the hands: the mine stays in the pocket
 
 	if (now < g_rcUnstuck)
 	{
@@ -768,13 +781,29 @@ void CCZRcCtl::CtlThink()
 	}
 }
 
+// training: everything else is taken away; missions: the weapons stay in the inventory, the tool just takes the hands
+static void Cz_HolsterOrStrip(CBasePlayer *pl)
+{
+	if (Cz_IsTraining())
+	{
+		pl->RemoveAllItems(FALSE);
+		return;
+	}
+	if (pl->m_pActiveItem)
+	{
+		pl->m_pActiveItem->Holster();
+		pl->m_pActiveItem = nullptr;
+	}
+	pl->pev->weaponmodel = 0;
+}
+
 // the bomb tool goes into the hands; everything else is taken away
 bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 {
 	if (name && !Q_strcmp(name, "weapon_radio"))
 	{
 		Cz_ToolsNewMap();
-		pl->RemoveAllItems(FALSE);
+		Cz_HolsterOrStrip(pl);
 		g_czTools = CZ_ICON_RADIO;
 		g_czRadioDone = false;
 		g_rcState = 0;
@@ -802,7 +831,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 		return false;
 
 	Cz_ToolsNewMap();
-	pl->RemoveAllItems(FALSE);
+	Cz_HolsterOrStrip(pl);
 	g_czTools = CZ_ICON_RCBOMB;
 	g_hRcPlanted = nullptr;
 	g_rcState = 0;

@@ -50,6 +50,10 @@ public:
 	float m_flLastSeen = 0;
 	float m_flNextChase = 0;
 	float m_flFlashOff = 0;
+	EHANDLE m_hLaser;
+	Vector m_vLaserAim;
+	float m_flLaserT = 0;
+	void LaserOff();
 
 	int m_react;
 	int m_step;
@@ -99,6 +103,9 @@ TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
 	DEFINE_FIELD(CCZSoldier, m_flLastSeen, FIELD_TIME),
 	DEFINE_FIELD(CCZSoldier, m_flNextChase, FIELD_TIME),
 	DEFINE_FIELD(CCZSoldier, m_flFlashOff, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_hLaser, FIELD_EHANDLE),
+	DEFINE_FIELD(CCZSoldier, m_vLaserAim, FIELD_VECTOR),
+	DEFINE_FIELD(CCZSoldier, m_flLaserT, FIELD_TIME),
 };
 IMPLEMENT_SAVERESTORE(CCZSoldier, CMonsterNPC)
 
@@ -363,7 +370,7 @@ static const SoldierGun g_soldierGuns[] =
 	{ "mp",           6, 0.055f, 0.09f, 5, 0.7f, 1.3f, "weapons/mp5-1.wav",         "combatidle" },
 	{ "shotgun",     25, 0.090f, 1.20f, 1, 0.3f, 0.6f, "weapons/sbarrel1.wav",       "combatidle" },
 	{ "assaultrifle", 9, 0.045f, 0.10f, 4, 0.7f, 1.4f, "weapons/ak47-1.wav",        "combatidle" },
-	{ "sniperrifle", 40, 0.008f, 2.20f, 1, 0.5f, 1.0f, "weapons/awp1.wav",          "combatidle" },
+	{ "sniperrifle", 40, 0.008f, 2.20f, 1, 2.8f, 4.5f, "weapons/awp1.wav",          "combatidle" },
 	{ "machinegun",   7, 0.080f, 0.08f, 9, 1.0f, 1.8f, "weapons/m249-1.wav",        "combatidle" },
 	{ "grenader",     9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
 	{ "law",          9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
@@ -431,6 +438,14 @@ void CCZSoldier::FireShot(CBaseEntity *pl)
 	}
 }
 
+void CCZSoldier::LaserOff()
+{
+	CBaseEntity *b = m_hLaser;
+	if (b)
+		UTIL_Remove(b);
+	m_hLaser = nullptr;
+}
+
 void CCZSoldier::CombatThink()
 {
 	if (!Soldier_IsHostile(pev) || m_bScripted || (pev->spawnflags & 128))
@@ -440,6 +455,7 @@ void CCZSoldier::CombatThink()
 	if (!pl || !pl->IsAlive() || (pl->pev->flags & FL_NOTARGET))
 	{
 		m_combat = 0;
+		LaserOff();
 		return;
 	}
 
@@ -491,47 +507,63 @@ void CCZSoldier::CombatThink()
 	}
 
 	// positioning: charge when the player is out of sight / too far, hold ground in view
-	float hold = melee ? 40.0f : 600.0f;
+	float hold = melee ? 36.0f : 600.0f;
 	if (!m_cantMove)
 	{
-		bool want = !visible || dist > hold + 150.0f;
+		bool want = melee ? (dist > 44.0f) : (!visible || dist > hold + 150.0f);
 		if (want && !m_bMoving && gpGlobals->time >= m_flNextChase)
 		{
-			m_flNextChase = gpGlobals->time + 0.8f;
+			m_flNextChase = gpGlobals->time + (melee ? 0.25f : 0.8f);
 			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true);
 		}
 		else if (m_bMoving && visible && dist < hold)
 			StopMove();
 		else if (m_bMoving && gpGlobals->time >= m_flNextChase)
 		{
-			m_flNextChase = gpGlobals->time + 0.8f;
+			m_flNextChase = gpGlobals->time + (melee ? 0.25f : 0.8f);
 			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true); // follow the moving target
 		}
 	}
 
 	if (!visible)
+	{
+		LaserOff();
 		return;
+	}
 
-	// sniper laser sight: red dot on the rifle, beam to the player (as in the original)
+	// sniper laser sight: ONE beam that smoothly follows the player; red dot sits on the rifle
 	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam && g_czLaserDot)
 	{
 		UTIL_MakeVectors(pev->angles);
 		Vector muzzle = pev->origin + Vector(0, 0, 58) + gpGlobals->v_forward * 20 + gpGlobals->v_right * 6;
-		TraceResult ltr;
-		UTIL_TraceLine(muzzle, target, dont_ignore_monsters, ENT(pev), &ltr);
-		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, muzzle);
-			WRITE_BYTE(TE_BEAMPOINTS);
-			WRITE_COORD(muzzle.x); WRITE_COORD(muzzle.y); WRITE_COORD(muzzle.z);
-			WRITE_COORD(ltr.vecEndPos.x); WRITE_COORD(ltr.vecEndPos.y); WRITE_COORD(ltr.vecEndPos.z);
-			WRITE_SHORT(g_czLaserBeam);
-			WRITE_BYTE(0); WRITE_BYTE(0);
-			WRITE_BYTE(2);   // life, 0.1 s
-			WRITE_BYTE(3);   // width
-			WRITE_BYTE(0);   // noise
-			WRITE_BYTE(255); WRITE_BYTE(0); WRITE_BYTE(0);
-			WRITE_BYTE(140); // brightness
-			WRITE_BYTE(0);
-		MESSAGE_END();
+		CBeam *bm = (CBeam *)(CBaseEntity *)m_hLaser;
+		float dtL = gpGlobals->time - m_flLaserT;
+		m_flLaserT = gpGlobals->time;
+		if (!bm)
+		{
+			bm = CBeam::BeamCreate("sprites/laserbeam.spr", 3);
+			if (bm)
+			{
+				bm->PointsInit(muzzle, target);
+				bm->SetColor(255, 0, 0);
+				bm->SetBrightness(150);
+				bm->pev->spawnflags |= 0; // life: removed when the sniper loses the player
+				m_hLaser = bm;
+				m_vLaserAim = muzzle + gpGlobals->v_forward * 200;
+			}
+			dtL = 0.1f;
+		}
+		if (bm)
+		{
+			if (dtL > 0.25f) dtL = 0.25f;
+			float k = dtL * 3.0f;
+			if (k > 1.0f) k = 1.0f;
+			m_vLaserAim = m_vLaserAim + (target - m_vLaserAim) * k;
+			TraceResult ltr;
+			UTIL_TraceLine(muzzle, muzzle + (m_vLaserAim - muzzle).Normalize() * 4096.0f, dont_ignore_monsters, ENT(pev), &ltr);
+			bm->SetStartPos(muzzle);
+			bm->SetEndPos(ltr.vecEndPos);
+		}
 		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, muzzle);
 			WRITE_BYTE(TE_SPRITE);
 			WRITE_COORD(muzzle.x); WRITE_COORD(muzzle.y); WRITE_COORD(muzzle.z);
@@ -1079,6 +1111,7 @@ BOOL CCZSoldier::TakeDamage(entvars_t *pevInflictor, entvars_t *pevAttacker, flo
 
 void CCZSoldier::Killed(entvars_t *pevAttacker, int iGib)
 {
+	LaserOff();
 	if (m_bDead)
 		return;
 
