@@ -71,9 +71,17 @@ static CBasePlayer *Cz_Player()
 static void Cz_EnsureStateFwd();
 static void Cz_AbortFiberView(CBasePlayer *pl);
 
+// the mine is a real weapon (slot 5): its animations only go out while it is the active one
+static bool Cz_RcActive(CBasePlayer *pl)
+{
+	return pl && pl->m_pActiveItem && !Q_strcmp(STRING(pl->m_pActiveItem->pev->classname), "cz_weapon_rcbomb");
+}
+
 static void Cz_WeapAnim(CBasePlayer *pl, int anim)
 {
 	if (!pl)
+		return;
+	if ((g_czTools & CZ_ICON_RCBOMB) && !Cz_RcActive(pl))
 		return;
 	pl->pev->weaponanim = anim;
 	// like the original: an explicit weapon animation message
@@ -402,6 +410,109 @@ static Vector g_rcPos, g_rcAng;
 static void Cz_RcAnim(CBasePlayer *pl, int a) { Cz_WeapAnim(pl, a); }
 
 // ---------------------------------------------------------------------------
+// weapon_radiocontrolledbomb: a real weapon (slot 5, position 6) with the native ammo counter.
+// All the behaviour (planting, detonator, animations) stays in cz_rc_ctl; the weapon is the carrier.
+// It shares the id of the unused CS bomb (WEAPON_C4), like the M60 shares the M249 id.
+// ---------------------------------------------------------------------------
+class CCzRcWeapon: public CBasePlayerWeapon
+{
+public:
+	virtual void Spawn()
+	{
+		Precache();
+		m_iId = WEAPON_C4;
+		SET_MODEL(edict(), "models/w_backpack.mdl");
+		m_iDefaultAmmo = 0;
+		FallInit();
+	}
+	virtual void Precache()
+	{
+		PRECACHE_MODEL("models/w_backpack.mdl");
+		PRECACHE_MODEL("models/p_c4.mdl");
+		PRECACHE_MODEL("models/v_rcontrolbomb.mdl");
+	}
+	virtual int GetItemInfo(ItemInfo *p)
+	{
+		p->pszName = "weapon_radiocontrolledbomb"; // the HUD sprite name; the entity itself is cz_weapon_rcbomb
+		p->pszAmmo1 = "RCBomb";
+		p->iMaxAmmo1 = 5;
+		p->pszAmmo2 = nullptr;
+		p->iMaxAmmo2 = -1;
+		p->iMaxClip = WEAPON_NOCLIP;
+		p->iSlot = 4;
+		p->iPosition = 6;
+		p->iId = m_iId = WEAPON_C4;
+		p->iWeight = 5;
+		p->iFlags = ITEM_FLAG_SELECTONEMPTY;
+		return 1;
+	}
+	virtual BOOL Deploy()
+	{
+		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.5f;
+		BOOL ok = DefaultDeploy("models/v_rcontrolbomb.mdl", "models/p_c4.mdl", g_rcHold ? 3 : 2, "c4", FALSE);
+		Cz_QueueAnim(0, g_rcHold ? 1 : 0, 0.7f);
+		return ok;
+	}
+	virtual int iItemSlot() { return 5; }
+	virtual float GetMaxSpeed() { return 250.0f; }
+	virtual BOOL UseDecrement() { return FALSE; }
+	virtual void PrimaryAttack() {}
+	virtual void SecondaryAttack() {}
+	virtual void WeaponIdle() {}
+	virtual BOOL CanHolster() { return TRUE; }
+};
+LINK_ENTITY_TO_CLASS(cz_weapon_rcbomb, CCzRcWeapon, CCSRcWeapon)
+
+// the counter of the native HUD follows the number of mines left
+static void Cz_RcSyncAmmo(CBasePlayer *pl)
+{
+	CBasePlayerItem *it = pl->m_rgpPlayerItems[4];
+	while (it && Q_strcmp(STRING(it->pev->classname), "cz_weapon_rcbomb"))
+		it = it->m_pNext;
+	if (!it)
+		return;
+	int idx = ((CBasePlayerWeapon *)it)->PrimaryAmmoIndex();
+	if (idx < 0 || pl->m_rgAmmo[idx] == g_rcCharges)
+		return;
+	pl->m_rgAmmo[idx] = g_rcCharges;
+	MESSAGE_BEGIN(MSG_ONE, gmsgAmmoX, nullptr, pl->pev);
+		WRITE_BYTE(idx);
+		WRITE_BYTE(g_rcCharges);
+	MESSAGE_END();
+}
+
+static void Cz_RcRemoveWeapon(CBasePlayer *pl)
+{
+	CBasePlayerItem *it = pl->m_rgpPlayerItems[4];
+	while (it && Q_strcmp(STRING(it->pev->classname), "cz_weapon_rcbomb"))
+		it = it->m_pNext;
+	if (!it)
+		return;
+	int idx = ((CBasePlayerWeapon *)it)->PrimaryAmmoIndex();
+	bool wasActive = (pl->m_pActiveItem == it);
+	if (wasActive)
+		it->Holster();
+	pl->RemovePlayerItem(it);
+	it->DestroyItem();
+	if (idx >= 0)
+	{
+		pl->m_rgAmmo[idx] = 0;
+		MESSAGE_BEGIN(MSG_ONE, gmsgAmmoX, nullptr, pl->pev);
+			WRITE_BYTE(idx);
+			WRITE_BYTE(0);
+		MESSAGE_END();
+	}
+	if (wasActive)
+	{
+		pl->m_pActiveItem = nullptr;
+		pl->pev->viewmodel = 0;
+		pl->pev->weaponmodel = 0;
+		if (pl->m_pLastItem)
+			pl->SelectLastItem();
+	}
+}
+
+// ---------------------------------------------------------------------------
 // persistent copy of the tool state (the globals above are not part of a save game)
 // ---------------------------------------------------------------------------
 static bool g_czStatePending = false;
@@ -481,7 +592,6 @@ public:
 				{
 					const char *vm = nullptr;
 					if (g_czTools & CZ_ICON_RADIO) vm = "models/v_radio.mdl";
-					else if (g_czTools & CZ_ICON_RCBOMB) vm = "models/v_rcontrolbomb.mdl";
 					else if (g_czTools & CZ_ICON_TORCH) vm = "models/v_btorch.mdl";
 					else if (g_czTools & CZ_ICON_FIBER) vm = "models/v_focamera.mdl";
 					else if (g_czTools & CZ_ICON_CAMERA) vm = "models/v_camera.mdl";
@@ -606,8 +716,9 @@ void CCZRcCtl::CtlThink()
 	bool edge2 = atk2 && !m_prev2;
 	m_prev2 = atk2;
 	float now = gpGlobals->time;
-	if (!Cz_IsTraining() && pl->m_pActiveItem)
-		edge = edge2 = false; // a real weapon is in the hands: the mine stays in the pocket
+	Cz_RcSyncAmmo(pl);
+	if (!Cz_RcActive(pl))
+		edge = edge2 = false; // another weapon is in the hands: the mine stays in the inventory
 
 	if (now < g_rcUnstuck)
 	{
@@ -787,8 +898,7 @@ void Cz_SelectTool(CBasePlayer *pl)
 		return;
 	const char *vm = nullptr;
 	int anim = 0;
-	if (g_czTools & CZ_ICON_RCBOMB) { vm = "models/v_rcontrolbomb.mdl"; anim = 2; }
-	else if (g_czTools & CZ_ICON_RADIO) { vm = "models/v_radio.mdl"; anim = 1; }
+	if (g_czTools & CZ_ICON_RADIO) { vm = "models/v_radio.mdl"; anim = 1; }
 	if (!vm)
 		return;
 	Cz_HolsterOrStrip(pl);
@@ -830,7 +940,8 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 		return false;
 
 	Cz_ToolsNewMap();
-	Cz_HolsterOrStrip(pl);
+	if (Cz_IsTraining())
+		pl->RemoveAllItems(FALSE);
 	g_czTools = CZ_ICON_RCBOMB;
 	g_hRcPlanted = nullptr;
 	g_rcState = 0;
@@ -838,18 +949,15 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 	g_rcHold = 0;
 	Q_memset(g_tQ, 0, sizeof(g_tQ));
 
+	Cz_RcRemoveWeapon(pl);
+	CBaseEntity *w = pl->GiveNamedItem("cz_weapon_rcbomb");
+	if (w)
 	{
-		int len = 0;
-		byte *f = LOAD_FILE_FOR_ME("models/v_rcontrolbomb.mdl", &len);
-		if (f)
-		{
-			FREE_FILE(f);
-			pl->pev->viewmodel = MAKE_STRING("models/v_rcontrolbomb.mdl");
-			Cz_WeapAnim((CBasePlayer *)pl, 2);
-		}
-		else
-			ALERT(at_console, "tool: models/v_rcontrolbomb.mdl not found\n");
+		Cz_RcSyncAmmo(pl);
+		pl->SwitchWeapon((CBasePlayerItem *)w);
 	}
+	else
+		ALERT(at_console, "tool: weapon_radiocontrolledbomb could not be given\n");
 
 	if (!UTIL_FindEntityByClassname(nullptr, "cz_rc_ctl"))
 		CBaseEntity::Create("cz_rc_ctl", pl->pev->origin, g_vecZero, nullptr);
@@ -893,6 +1001,8 @@ void Cz_StripTools()
 	if (!g_czTools && !g_fiberOn)
 		return;
 	ALERT(at_aiconsole, "tools taken away (mask %d)\n", g_czTools);
+	if (pl && (g_czTools & CZ_ICON_RCBOMB))
+		Cz_RcRemoveWeapon(pl);
 	g_czTools = 0;
 	g_rcState = 0;
 	g_rcCharges = 5;
@@ -904,6 +1014,7 @@ void Cz_StripTools()
 	Q_memset(g_tQ, 0, sizeof(g_tQ));
 	if (pl)
 	{
+		Cz_RcRemoveWeapon(pl);
 		pl->pev->viewmodel = 0;
 		// missions: the weapon that was put aside comes back
 		if (!Cz_IsTraining() && !pl->m_pActiveItem && pl->m_pLastItem)
@@ -1667,7 +1778,7 @@ void CCZUseTool::ToolThink()
 	if (m_rcMode)
 	{
 		// plant with the left button (one press), only with a mine in the hands, inside the marked zone
-		if (atkEdge && g_rcHold == 0 && g_rcCharges > 0 && g_rcState == 0 && gpGlobals->time >= g_rcBusy)
+		if (atkEdge && Cz_RcActive(pl) && g_rcHold == 0 && g_rcCharges > 0 && g_rcState == 0 && gpGlobals->time >= g_rcBusy)
 		{
 			m_nextUse = gpGlobals->time + 1.0f;
 			Complete(pl);

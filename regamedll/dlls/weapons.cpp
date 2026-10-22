@@ -379,6 +379,7 @@ void WeaponsPrecache()
 	UTIL_PrecacheOtherWeapon("weapon_galil");
 	UTIL_PrecacheOtherWeapon("weapon_famas");
 	UTIL_PrecacheOtherWeapon("weapon_laws"); // last: its ammo must not shift the stock ammo indexes
+	UTIL_PrecacheOtherWeapon("cz_weapon_rcbomb"); // after the LAW: its ammo index comes last
 
 	if (g_pGameRules->IsDeathmatch())
 	{

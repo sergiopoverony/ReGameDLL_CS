@@ -214,6 +214,7 @@ class CCSTorchFx: public CCSEntity {};
 class CCSRcPlanted: public CCSEntity {};
 class CCSRcCtl: public CCSEntity {};
 class CCSLaws: public CCSPlayerWeapon {};
+class CCSRcWeapon: public CCSPlayerWeapon {};
 class CCSLawRocket: public CCSEntity {};
 class CCSCzState: public CCSEntity {};
 class CCSCzInfoCamera: public CCSAnimating {};
