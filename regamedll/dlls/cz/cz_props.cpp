@@ -502,6 +502,7 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_hPatrol, FIELD_EHANDLE),
 	DEFINE_FIELD(CMonsterNPC, m_flPatrolNext, FIELD_TIME),
 	DEFINE_FIELD(CMonsterNPC, m_flGhostUntil, FIELD_TIME),
+	DEFINE_FIELD(CMonsterNPC, m_flNpcDropAt, FIELD_TIME),
 	DEFINE_FIELD(CMonsterNPC, m_flLiftApplied, FIELD_FLOAT),
 	DEFINE_FIELD(CMonsterNPC, m_iMoveSeq, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_bAllowGhost, FIELD_CHARACTER),
@@ -649,6 +650,21 @@ void CMonsterNPC::ApplySitOffset()
 	m_bSitting = false;
 	if (!m_bNoSit && ExtractBbox(pev->sequence, mins, maxs))
 		m_bSitting = (maxs[2] < 56.0f);
+	if (m_bSitting)
+	{
+		// kneeling / cowering poses stand on the floor, only chair poses get the lift
+		studiohdr_t *hdr = (studiohdr_t *)GET_MODEL_PTR(ENT(pev));
+		if (hdr && pev->sequence >= 0 && pev->sequence < hdr->numseq)
+		{
+			mstudioseqdesc_t *sd = (mstudioseqdesc_t *)((byte *)hdr + hdr->seqindex) + pev->sequence;
+			char low[40];
+			Q_strncpy(low, sd->label, sizeof(low) - 1);
+			low[sizeof(low) - 1] = 0;
+			for (char *c = low; *c; c++) *c = tolower((unsigned char)*c);
+			if (strstr(low, "cower") || strstr(low, "kneel") || strstr(low, "crouch"))
+				m_bSitting = false;
+		}
+	}
 
 	float want = m_bSitting ? CVAR_GET_FLOAT("cz_npc_sit_offset") : 0.0f;
 	if (want != m_flSitApplied)
@@ -742,6 +758,15 @@ void CMonsterNPC::Spawn()
 	pev->takedamage = DAMAGE_NO;
 	pev->health = 100;
 
+	// original CGenericMonster::Spawn (cz.so 0xb5483): monster_generic with spawnflags 4 is not solid
+	// (cz_recoil2: the hidden drag-scene actors dragt1/dragdelta/dragt2 stood in the tower door as an invisible wall)
+	if (FClassnameIs(pev, "monster_generic") && (pev->spawnflags & 4))
+		pev->solid = SOLID_NOT;
+
+	// a monster for the triggers ("monsters can trigger" brushes), like CBaseMonster::MonsterInit of the original
+	// (cz_recoil2: trigger_multiple *1 in the evac zone reacts only to monsters - the hostage did not end the mission)
+	pev->flags |= FL_MONSTER;
+
 	UTIL_SetSize(pev, Vector(-16, -16, 0), Vector(16, 16, 72)); // origin at the feet, like HL monsters
 	UTIL_SetOrigin(pev, pev->origin);
 
@@ -753,6 +778,12 @@ void CMonsterNPC::Spawn()
 	ApplyIdle(FStringNull(m_idleAnim) ? "idle1" : STRING(m_idleAnim));
 	m_spawned = 1;
 
+	// original CBaseMonster::StartMonster: the monster drops to the floor in its first think (not the ones made by a
+	// monstermaker). cz_recoil2 deltaHostage stands at z 8 over the floor at 0 and hung in the air (test 30.10)
+	extern bool g_czMakerSpawn;
+	if (FClassnameIs(pev, "monster_npc") && !g_czMakerSpawn)
+		m_flNpcDropAt = gpGlobals->time + 0.1f;
+
 	SetThink(&CMonsterNPC::AnimThink);
 	pev->nextthink = gpGlobals->time + 0.1f;
 }
@@ -760,6 +791,20 @@ void CMonsterNPC::Spawn()
 void CMonsterNPC::AnimThink()
 {
 	StudioFrameAdvance();
+
+	if (m_flNpcDropAt > 0 && gpGlobals->time >= m_flNpcDropAt)
+	{
+		m_flNpcDropAt = 0;
+		if (!m_bMoving && !m_bScripted && !m_bDead)
+		{
+			Vector o = pev->origin;
+			o.z += 1.0f - m_flSitApplied;
+			m_flSitApplied = 0;
+			UTIL_SetOrigin(pev, o);
+			DROP_TO_FLOOR(ENT(pev));
+			ApplySitOffset();
+		}
+	}
 
 	if (pev->iuser3 == 77 && gpGlobals->time >= pev->fuser3)
 	{
@@ -1032,11 +1077,50 @@ void CMonsterNPC::StopMove()
 // the steps that put the actor somewhere with UTIL_SetOrigin (ghost walk of the scripted soldiers) do not touch
 // triggers in the engine: do it here, so "monsters can trigger" brushes work (cz_recoil: trigger_once *3 in front of
 // deltaDoor - delta walks into it, then fuck_you_valve opens the door)
+// a step must not cross a wall or leave the floor (test 30.10: the scripted delta ran through the tower wall,
+// the following hostage went through walls, a sniper ran over the courtyard in the air - all from the
+// collision-free "ghost" steps). The original monsters always move with their hull (MoveToLocation / WALK_MOVE).
+static bool Npc_StepBlocked(edict_t *self, const Vector &from, const Vector &to)
+{
+	static const float heights[] = { 18.0f, 54.0f };
+	for (float h : heights)
+	{
+		TraceResult tr;
+		UTIL_TraceLine(from + Vector(0, 0, h), to + Vector(0, 0, h), ignore_monsters, self, &tr);
+		if (tr.fStartSolid || tr.flFraction < 1.0f)
+		{
+			CBaseEntity *hit = CBaseEntity::Instance(tr.pHit);
+			// a door the actor is opening is not a wall
+			if (hit && hit->edict() != INDEXENT(0) && hit->pev->classname
+				&& !Q_strncmp(STRING(hit->pev->classname), "func_door", 9) && hit->pev->velocity.Length() > 0.1f)
+				continue;
+			return true;
+		}
+	}
+
+	// floor under the new spot (stairs down up to 48 units)
+	TraceResult fl;
+	UTIL_TraceLine(to + Vector(0, 0, 24), to - Vector(0, 0, 48), ignore_monsters, self, &fl);
+	if (fl.flFraction >= 1.0f)
+		return true;
+
+	return false;
+}
+
 bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 {
 	Vector before = pev->origin;
 	bool r = MoveStepImpl(stopDist, checkWalls);
-	if ((pev->origin - before).Length() > 0.1f)
+	Vector moved = pev->origin - before;
+	if (moved.Length() > 0.1f && moved.Length() < 64.0f && Npc_StepBlocked(edict(), before, pev->origin))
+	{
+		// back to where we were, walk with the hull next time (WALK_MOVE steers around the wall)
+		UTIL_SetOrigin(pev, before);
+		pev->velocity = Vector(0, 0, 1);
+		m_flGhostUntil = 0.0f;
+		return r;
+	}
+	if (moved.Length() > 0.1f)
 		TouchTriggers();
 	return r;
 }
@@ -1603,8 +1687,8 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (m_fMoveTo == 1 || m_fMoveTo == 2)
 	{
 		npc->StartMove(pev->origin, pev->angles.y, m_fMoveTo == 2);
-		if (npc->m_bAllowGhost)
-			npc->m_flGhostUntil = gpGlobals->time + 40.0f; // scripted soldier: follow the node path without hull collision (dynamic props/walls)
+		// (removed 30.10: 40 s of collision-free walking for scripted soldiers let them run through walls and in the air;
+		// they walk with the hull now, the short ghost fallback for door frames is checked by Npc_StepBlocked)
 		// the red-shirt worker of cz_train01 walks the original routes (waypoints measured from the original demo)
 		npc->m_flYawBias = 0.0f;
 		if (FStrEq(STRING(npc->pev->targetname), "worker_walk1"))

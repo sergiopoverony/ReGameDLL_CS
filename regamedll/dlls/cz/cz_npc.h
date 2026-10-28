@@ -47,6 +47,7 @@ public:
 	bool m_bRun;
 	bool m_bSitting;
 	float m_flSitApplied;
+	float m_flNpcDropAt = 0; // monster_npc: drop to the floor in the first think (original StartMonster)
 	float m_flMoveYaw;
 	float m_flBiasD0 = 0;
 	float m_flBiasCur = 0;

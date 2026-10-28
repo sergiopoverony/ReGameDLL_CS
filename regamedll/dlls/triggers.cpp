@@ -720,20 +720,15 @@ void CTriggerCDAudio::DelayedPlay()
 
 void CTriggerCDAudio::PlayTrack(edict_t *pEdict)
 {
-	// CZ:DS: cz_recoil starts its music right when the client comes in (level_start, ~0.2 s): Xash dropped that
-	// command and the black intro screen stayed silent. Start such music a little later, still on the black screen.
-	if (!FStringNull(m_iszTrackName) && gpGlobals->time < 2.5f && !pev->iuser2)
-	{
-		pev->iuser2 = 1;
-		ALERT(at_console, "trigger_cdaudio: music '%s' delayed to 2.5 s (map start)\n", STRING(m_iszTrackName));
-		SetThink(&CTriggerCDAudio::DelayedPlay);
-		pev->nextthink = 2.5f;
-		return;
-	}
-
 	if (!FStringNull(m_iszTrackName))
 	{
 		// CZ:DS: music file relative to the game directory, e.g. "sound/music/train_intro"
+		if (!pEdict)
+		{
+			CBaseEntity *pl = UTIL_PlayerByIndex(1); // single player: fired by a sequence without an activator
+			if (pl)
+				pEdict = pl->edict();
+		}
 		if (pEdict)
 		{
 			char path[260];
@@ -750,7 +745,9 @@ void CTriggerCDAudio::PlayTrack(edict_t *pEdict)
 			}
 			ALERT(at_console, "trigger_cdaudio: music '%s'\n", path);
 			bool loop = false; // CZ:DS tracks play once
-			CLIENT_COMMAND(pEdict, UTIL_VarArgs("music \"%s\" \"%s\"\n", path, loop ? path : "*"));
+			// "cz_music": the client starts it when the game view is drawn (Xash keeps a track started on the
+			// loading screen paused forever - the cz_recoil intro music was silent, test 30.10)
+			CLIENT_COMMAND(pEdict, UTIL_VarArgs("cz_music \"%s\" \"%s\"\n", path, loop ? path : "*"));
 		}
 	}
 	else

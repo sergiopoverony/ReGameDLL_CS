@@ -225,6 +225,12 @@ void CTriggerSequence::Resolve()
 	Seq_LoadFile(m_fileName);
 
 	m_entry = g_seqLib.Find(m_fileName, m_entryName);
+
+	// the original CTriggerSequence ignores "sequence_file": Spawn/Restart call SequenceGet(NULL, sequence_id),
+	// the entry is searched in every loaded file (cz_recoil2 seqEnd names the missing "cz_recoil2_01",
+	// its seqEndEvents lives in cz_recoil2.seq - the mission did not end, test 30.10)
+	if (!m_entry)
+		m_entry = g_seqLib.Find("", m_entryName);
 }
 
 static std::string Seq_WithWav(const std::string &n)
