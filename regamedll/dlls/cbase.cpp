@@ -573,6 +573,13 @@ int DispatchRestore(edict_t *pent, SAVERESTOREDATA *pSaveData, int globalEntity)
 		// Again, could be deleted, get the pointer again.
 		pEntity = GET_PRIVATE<CBaseEntity>(pent);
 
+		// CZ:DS: iuser4 (the light multiplier) is not saved - give it back after the load (see world.cpp)
+		if (pEntity)
+		{
+			extern void Cz_ApplyWorldLight(CBaseEntity *pEntity);
+			Cz_ApplyWorldLight(pEntity);
+		}
+
 		// Is this an overriding global entity (coming over the transition), or one restoring in a level
 		if (globalEntity)
 		{

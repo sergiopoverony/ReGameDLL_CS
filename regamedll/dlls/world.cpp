@@ -468,6 +468,9 @@ struct CzWorldEnv
 };
 static CzWorldEnv g_czEnv;
 
+static void Cz_EnvSet(const char *k, const char *value);
+static void Cz_EnvReadBsp();
+
 static void Cz_EnvCheckMap()
 {
 	if (!Q_strcmp(g_czEnv.map, STRING(gpGlobals->mapname)))
@@ -484,6 +487,64 @@ static void Cz_EnvCheckMap()
 	g_czEnv.grassMinHeight = 30.0f;
 	g_czEnv.grassMaxHeight = 38.0f;
 	g_czEnv.grassDensity = 70;
+	// a loaded save game does not run the worldspawn keys again: read them from the map file itself
+	Cz_EnvReadBsp();
+}
+
+static void Cz_EnvSet(const char *k, const char *value)
+{
+	float v = Q_atof(value);
+	if (FStrEq(k, "minWindX")) g_czEnv.windMinX = v;
+	else if (FStrEq(k, "maxWindX")) g_czEnv.windMaxX = v;
+	else if (FStrEq(k, "minWindY")) g_czEnv.windMinY = v;
+	else if (FStrEq(k, "maxWindY")) g_czEnv.windMaxY = v;
+	else if (FStrEq(k, "minTime")) g_czEnv.windTimeMin = v;
+	else if (FStrEq(k, "maxTime")) g_czEnv.windTimeMax = v;
+	else if (FStrEq(k, "grassSprite")) Q_strncpy(g_czEnv.grassSprite, value, sizeof(g_czEnv.grassSprite) - 1);
+	else if (FStrEq(k, "grassFadeDist")) g_czEnv.grassFadeDist = v;
+	else if (FStrEq(k, "grassMinHeight")) g_czEnv.grassMinHeight = v;
+	else if (FStrEq(k, "grassMaxHeight")) g_czEnv.grassMaxHeight = v;
+	else if (FStrEq(k, "grassDensity")) g_czEnv.grassDensity = Q_atoi(value);
+	else if (FStrEq(k, "lightmultiplier")) g_czEnv.lightMul = v;
+}
+
+// the first entity of the BSP entity lump (lump 0) is the worldspawn: "key" "value" pairs
+static void Cz_EnvReadBsp()
+{
+	char path[128];
+	Q_snprintf(path, sizeof(path), "maps/%s.bsp", STRING(gpGlobals->mapname));
+	int len = 0;
+	byte *file = LOAD_FILE_FOR_ME(path, &len);
+	if (!file)
+		return;
+	if (len > 8 + 15 * 8)
+	{
+		int ofs = *(int *)(file + 4);
+		int size = *(int *)(file + 8);
+		if (ofs > 0 && size > 0 && ofs + size <= len)
+		{
+			const char *p = (const char *)file + ofs, *end = p + size;
+			while (p < end && *p != '{') p++;
+			char key[128], val[256];
+			while (p < end && *p != '}')
+			{
+				while (p < end && *p != '"' && *p != '}') p++;
+				if (p >= end || *p == '}') break;
+				int n = 0;
+				for (p++; p < end && *p != '"'; p++) if (n < 127) key[n++] = *p;
+				key[n] = 0;
+				p++;
+				while (p < end && *p != '"' && *p != '}') p++;
+				if (p >= end || *p == '}') break;
+				n = 0;
+				for (p++; p < end && *p != '"'; p++) if (n < 255) val[n++] = *p;
+				val[n] = 0;
+				p++;
+				Cz_EnvSet(key, val);
+			}
+		}
+	}
+	FREE_FILE(file);
 }
 
 static bool Cz_EnvKeyValue(KeyValueData *pkvd)
@@ -523,10 +584,12 @@ void Cz_ApplyWorldLight(CBaseEntity *pEntity)
 	bool item = !Q_strncmp(c, "item_", 5) && Q_strcmp(c, "item_generic"); // item_generic has its own key
 	if (!item && Q_strncmp(c, "monster_", 8) && Q_strncmp(c, "weapon_", 7) && Q_strncmp(c, "ammo_", 5) && Q_strncmp(c, "cz_weapon_", 10))
 		return;
-	if (pEntity->pev->renderfx == kRenderFxLightMultiplier)
+	// iuser4 is not part of a save game: after a load the entity has renderfx 21 with iuser4 0 = black. Repair it.
+	if (pEntity->pev->renderfx == kRenderFxLightMultiplier && pEntity->pev->iuser4 != 0)
 		return;
 	pEntity->pev->renderfx = kRenderFxLightMultiplier;
-	pEntity->pev->iuser4 = clamp(int(g_czEnv.lightMul), 0, 255);
+	// the user asked for half of the original boost (cz_recoil: 30 = x3 was too bright -> 15 = x1.5); never below 10 (= x1)
+	pEntity->pev->iuser4 = clamp(int(g_czEnv.lightMul * 0.5f), 10, 255);
 }
 
 // sent with the first HUD update of the player (the original does it in SendInitClientMessages)

@@ -253,6 +253,7 @@ public:
 public:
 	static TYPEDESCRIPTION m_SaveData[];
 	void PlayTrack(edict_t *pEdict);
+	void EXPORT DelayedPlay(); // CZ:DS: music fired in the first moments of a map is started a bit later
 	void EXPORT DoorWatch(); // CZ:DS: music stops when the player walks through the door that shares our targetname
 
 	string_t m_iszTrackName;

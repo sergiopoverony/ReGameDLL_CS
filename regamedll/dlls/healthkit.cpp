@@ -14,6 +14,8 @@ void CHealthKit::Precache()
 {
 	PRECACHE_MODEL("models/w_medkit.mdl");
 	PRECACHE_SOUND("items/smallmedkit1.wav");
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		PRECACHE_SOUND("items/healthpickup.wav");
 }
 
 BOOL CHealthKit::MyTouch(CBasePlayer *pPlayer)
@@ -30,6 +32,17 @@ BOOL CHealthKit::MyTouch(CBasePlayer *pPlayer)
 		healthValue = pev->health;
 	}
 #endif
+
+	// CZ:DS, original cz.so CItemHealthKit::AddAmmo (0xc44b0): 25 hp, items/healthpickup.wav,
+	// and no ItemPickup message (our HUD drew a wrong icon on the right, user 29.10)
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+	{
+		if (pPlayer->pev->health == 100.0f || !pPlayer->TakeHealth(25.0f, DMG_GENERIC))
+			return FALSE;
+		EMIT_SOUND_DYN(ENT(pPlayer->pev), CHAN_ITEM, "items/healthpickup.wav", VOL_NORM, 0.8f, 0, PITCH_NORM);
+		UTIL_Remove(this);
+		return TRUE;
+	}
 
 	if (pPlayer->TakeHealth(healthValue, DMG_GENERIC))
 	{

@@ -6415,6 +6415,12 @@ void CBasePlayer::SelectItem(const char *pstr)
 #endif
 
 	auto pItem = GetItemByName(pstr);
+	// CZ:DS: the M60 shares the weapon id of the M249 and the client HUD knows that id as "weapon_m249":
+	// selecting it by the HUD/slot asked for an item the player does not have (cz_recoil: the M60 could not be selected)
+	if (!pItem && !Q_strcmp(pstr, "weapon_m249"))
+		pItem = GetItemByName("weapon_m60");
+	else if (!pItem && !Q_strcmp(pstr, "weapon_m60"))
+		pItem = GetItemByName("weapon_m249");
 	if (!pItem || pItem == m_pActiveItem)
 		return;
 

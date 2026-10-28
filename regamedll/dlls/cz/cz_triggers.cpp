@@ -353,12 +353,14 @@ public:
 	static TYPEDESCRIPTION m_SaveData[];
 	string_t m_iszType;
 	int m_usEvent;
+	float m_flVelMod;
 };
 
 TYPEDESCRIPTION CEnvLiveAmmoShooter::m_SaveData[] =
 {
 	DEFINE_FIELD(CEnvLiveAmmoShooter, m_iszType, FIELD_STRING),
 	DEFINE_FIELD(CEnvLiveAmmoShooter, m_usEvent, FIELD_INTEGER),
+	DEFINE_FIELD(CEnvLiveAmmoShooter, m_flVelMod, FIELD_FLOAT),
 };
 
 LINK_ENTITY_TO_CLASS(env_liveammoshooter, CEnvLiveAmmoShooter, CCSEnvLiveAmmoShooter)
@@ -369,6 +371,11 @@ void CEnvLiveAmmoShooter::KeyValue(KeyValueData *pkvd)
 	if (FStrEq("type", pkvd->szKeyName))
 	{
 		m_iszType = ALLOC_STRING(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq("velmod", pkvd->szKeyName))
+	{
+		m_flVelMod = Q_atof(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
 	else
@@ -391,13 +398,24 @@ void CEnvLiveAmmoShooter::Precache()
 
 void CEnvLiveAmmoShooter::Use(CBaseEntity *, CBaseEntity *, USE_TYPE, float)
 {
+	// as in the original cz.so CEnvLiveAmmoShooter::Use (0xa2b10):
+	// target by targetname, else by classname; velmod 0 -> 1;
+	// velocity = (target - origin) * velmod; HE: fuse 3.5 s, dmg 85;
+	// flash: fuse 3.5 s; smoke: fuse 1.5 s; owner = the shooter itself.
 	CBaseEntity *pTarget = UTIL_FindEntityByTargetname(nullptr, STRING(pev->target));
 	if (!pTarget)
+		pTarget = UTIL_FindEntityByClassname(nullptr, STRING(pev->target));
+	if (!pTarget)
 		return;
+
+	if (m_flVelMod == 0.0f)
+		m_flVelMod = 1.0f;
 
 	Vector src = pev->origin;
 	Vector delta = pTarget->pev->origin - src;
 	const char *type = STRING(m_iszType);
+
+	ALERT(at_console, "env_liveammoshooter '%s': %s -> '%s'\n", STRING(pev->targetname), type, STRING(pev->target));
 
 	if (FStrEq(type, "lawrocket"))
 	{
@@ -407,20 +425,16 @@ void CEnvLiveAmmoShooter::Use(CBaseEntity *, CBaseEntity *, USE_TYPE, float)
 		return;
 	}
 
-	// lob the grenade: flight time T, velocity = delta / T + 0.5 * g * T
-	float T = delta.Length() / 600.0f;
-	if (T < 0.5f) T = 0.5f;
-	if (T > 2.5f) T = 2.5f;
-	float g = CVAR_GET_FLOAT("sv_gravity") * 0.55f;
-	Vector vel = delta * (1.0f / T);
-	vel.z += 0.5f * g * T;
-
-	ALERT(at_console, "env_liveammoshooter '%s': %s -> '%s'\n", STRING(pev->targetname), type, STRING(pev->target));
+	Vector vel = delta * m_flVelMod;
 
 	if (FStrEq(type, "smokegrenade"))
-		CGrenade::ShootSmokeGrenade(nullptr, src, vel, T + 0.2f, (unsigned short)m_usEvent);
+		CGrenade::ShootSmokeGrenade(pev, src, vel, 1.5f, (unsigned short)m_usEvent);
 	else if (FStrEq(type, "flashgrenade"))
-		CGrenade::ShootTimed(nullptr, src, vel, T + 0.2f);
+		CGrenade::ShootTimed(pev, src, vel, 3.5f);
 	else
-		CGrenade::ShootTimed2(nullptr, src, vel, T + 0.2f, 0, (unsigned short)m_usEvent);
+	{
+		CGrenade *pGren = CGrenade::ShootTimed2(pev, src, vel, 3.5f, 0, (unsigned short)m_usEvent);
+		if (pGren)
+			pGren->pev->dmg = 85.0f;
+	}
 }

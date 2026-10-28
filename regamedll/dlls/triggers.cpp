@@ -712,8 +712,25 @@ void PlayCDTrack(edict_t *pClient, int iTrack)
 }
 
 // only plays for ONE client, so only use in single play!
+void CTriggerCDAudio::DelayedPlay()
+{
+	CBaseEntity *pPlayer = UTIL_PlayerByIndex(1);
+	PlayTrack(pPlayer ? pPlayer->edict() : nullptr);
+}
+
 void CTriggerCDAudio::PlayTrack(edict_t *pEdict)
 {
+	// CZ:DS: cz_recoil starts its music right when the client comes in (level_start, ~0.2 s): Xash dropped that
+	// command and the black intro screen stayed silent. Start such music a little later, still on the black screen.
+	if (!FStringNull(m_iszTrackName) && gpGlobals->time < 2.5f && !pev->iuser2)
+	{
+		pev->iuser2 = 1;
+		ALERT(at_console, "trigger_cdaudio: music '%s' delayed to 2.5 s (map start)\n", STRING(m_iszTrackName));
+		SetThink(&CTriggerCDAudio::DelayedPlay);
+		pev->nextthink = 2.5f;
+		return;
+	}
+
 	if (!FStringNull(m_iszTrackName))
 	{
 		// CZ:DS: music file relative to the game directory, e.g. "sound/music/train_intro"

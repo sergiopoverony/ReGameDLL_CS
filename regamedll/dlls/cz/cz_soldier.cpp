@@ -65,6 +65,14 @@ public:
 	float m_flNextChase = 0;
 	float m_flNextDoor = 0;
 	float m_flFlashOff = 0;
+	// original CTerrorist weapon types (cz.so GetBehaviorType / SetupWeapons / HandleAnimEvent)
+	float m_flNextGren = 0;  // grenader: next throw (original +6 s)
+	float m_flGrenAt = 0;    // grenader: release moment of the throwgrenade anim (event 7, frame 49)
+	Vector m_vToss;          // grenader: VecCheckToss velocity
+	float m_flLawAt = 0;     // law: rocket moment of the LAW_fire anim (event 4, frame 10)
+	char m_kamaBlow = 0;     // kamakazi: blow-up started
+	float m_flBlowAt = 0;    // kamakazi: end of the "kamakazi" anim -> explosion
+	void TrySetRunAnim();
 	EHANDLE m_hLaser;
 	EHANDLE m_hLaserGlow;
 	Vector m_vLaserAim;
@@ -84,6 +92,7 @@ public:
 	int m_bInvuln = 0;
 	int m_bUnkillable = 0;
 	float m_flMaxHealth = 100;
+	float m_flHealthMul = 0;
 	bool m_bTrigFired = false;
 	float m_flNextSee = 0;
 	float m_flFadeStart = 0;
@@ -125,6 +134,12 @@ TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
 	DEFINE_FIELD(CCZSoldier, m_vLaserAim, FIELD_VECTOR),
 	DEFINE_FIELD(CCZSoldier, m_vLaserDot, FIELD_VECTOR),
 	DEFINE_FIELD(CCZSoldier, m_flLaserT, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flNextGren, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_flGrenAt, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_vToss, FIELD_VECTOR),
+	DEFINE_FIELD(CCZSoldier, m_flLawAt, FIELD_TIME),
+	DEFINE_FIELD(CCZSoldier, m_kamaBlow, FIELD_CHARACTER),
+	DEFINE_FIELD(CCZSoldier, m_flBlowAt, FIELD_TIME),
 };
 IMPLEMENT_SAVERESTORE(CCZSoldier, CMonsterNPC)
 
@@ -295,10 +310,10 @@ static const SoldierWeapon g_terrorWeapons[] =
 	{ "assaultrifle", 4, "idle1" },
 	{ "sniperrifle",  3, "idle1" },
 	{ "machinegun",   7, "idle1" },
-	{ "grenader",     2, "idle1" },
-	{ "law",          2, "idle1" },
+	{ "grenader",     5, "pistol_idle1" }, // original SetupWeapons type 7: pistol + hand grenades
+	{ "law",          2, "LAW_fire_idle" }, // original SetActivityLAWBase: idle LAW_fire_idle
 	{ "melee",        6, "machete_idle1" },
-	{ "kamakazi",     9, "idle1" },
+	{ "kamakazi",     9, "machete_idle1" }, // original SetActivityKamakaziBase: idle machete_idle1
 };
 
 static const SoldierWeapon *Soldier_FindWeapon(const char *classname)
@@ -351,6 +366,11 @@ void CCZSoldier::KeyValue(KeyValueData *pkvd)
 		m_bInvuln = Q_atoi(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
+	else if (FStrEq(pkvd->szKeyName, "healthmult")) // original CBaseMonster::KeyValue
+	{
+		m_flHealthMul = Q_atof(pkvd->szValue);
+		pkvd->fHandled = TRUE;
+	}
 	else if (FStrEq(pkvd->szKeyName, "unkillable"))
 	{
 		m_bUnkillable = Q_atoi(pkvd->szValue);
@@ -358,7 +378,7 @@ void CCZSoldier::KeyValue(KeyValueData *pkvd)
 	}
 	else if (FStrEq(pkvd->szKeyName, "alertradius") || FStrEq(pkvd->szKeyName, "alertable")
 		|| FStrEq(pkvd->szKeyName, "classtype") || FStrEq(pkvd->szKeyName, "weaponaccuracy")
-		|| FStrEq(pkvd->szKeyName, "healthmult") || FStrEq(pkvd->szKeyName, "language"))
+		|| FStrEq(pkvd->szKeyName, "language"))
 	{
 		pkvd->fHandled = TRUE; // combat AI keys, not used yet
 	}
@@ -367,6 +387,17 @@ void CCZSoldier::KeyValue(KeyValueData *pkvd)
 }
 
 static const char *Soldier_Wav(const char *classname, const char *key, char *buf, size_t sz);
+
+// the map writes models/sealb.mdl or models/sealB.mdl
+static bool Soldier_ModelHas(entvars_t *pev, const char *part)
+{
+	char low[64];
+	Q_strncpy(low, STRING(pev->model), sizeof(low) - 1);
+	low[sizeof(low) - 1] = 0;
+	for (char *c = low; *c; c++)
+		*c = tolower((unsigned char)*c);
+	return Q_strstr(low, part) != nullptr;
+}
 static void Soldier_Voice(CBaseEntity *e, const char *key);
 
 // ---------------------------------------------------------------------------
@@ -391,8 +422,8 @@ static const SoldierGun g_soldierGuns[] =
 	{ "assaultrifle", 9, 0.045f, 0.10f, 4, 0.7f, 1.4f, "weapons/ak47-1.wav",        "combatidle" },
 	{ "sniperrifle", 40, 0.008f, 2.20f, 1, 2.8f, 4.5f, "weapons/awp1.wav",          "combatidle" },
 	{ "machinegun",   7, 0.080f, 0.08f, 9, 1.0f, 1.8f, "weapons/m249-1.wav",        "combatidle" },
-	{ "grenader",     9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
-	{ "law",          9, 0.050f, 0.10f, 4, 0.8f, 1.5f, "weapons/ak47-1.wav",        "combatidle" },
+	{ "grenader",     8, 0.060f, 0.35f, 1, 0.5f, 1.0f, "weapons/glock18-2.wav",      "pistol_combatidlle" }, // original: ShootPistol
+	{ "law",          9, 0.030f, 5.00f, 1, 5.0f, 5.0f, nullptr,                     "LAW_fire_idle" }, // rockets, see CombatThink
 	{ "melee",        0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "machete_combatidle" },
 	{ "kamakazi",     0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "combatidle" },
 };
@@ -417,9 +448,7 @@ static const SoldierOrigDmg g_soldierOrigDmg[] =
 	{ "machinegun",    8, 11, 15, 1 },
 	{ "shotgun",       3,  5, 10, 5 },
 	{ "sniperrifle",  18, 25, 45, 1 },
-	// grenader / law: their rifle part is not taken from the original (the original LAW fires rockets), assault rifle values
-	{ "grenader",      5,  8, 12, 1 },
-	{ "law",           5,  8, 12, 1 },
+	{ "grenader",      1,  2,  5, 1 }, // original HandleAnimEvent: type 7 shoots ShootPistol
 };
 
 static const SoldierOrigDmg *Soldier_FindOrigDmg(const char *gunName)
@@ -460,6 +489,24 @@ static bool Soldier_IsHostile(entvars_t *pev)
 }
 
 static int g_czLaserBeam = 0, g_czLaserGlow = 0;
+
+// sniper laser beam that moves its player end every server frame (bug 29.10: updating it from the
+// soldier think, 10 times a second, made the beam jump; now it follows the player smoothly)
+class CCZLaser: public CBeam
+{
+public:
+	EHANDLE m_hTarget;
+	void EXPORT Track()
+	{
+		CBaseEntity *t = m_hTarget;
+		if (t)
+		{
+			SetStartPos(t->pev->origin + t->pev->view_ofs * 0.5f);
+			RelinkBeam();
+		}
+		pev->nextthink = gpGlobals->time + 0.01f;
+	}
+};
 
 void CCZSoldier::FireShot(CBaseEntity *pl)
 {
@@ -536,6 +583,67 @@ void CCZSoldier::LaserOff()
 	m_hLaserGlow = nullptr;
 }
 
+// HL / CZ VecCheckToss (the original CheckRangeAttack2 calls it with gravity adj 0.5)
+static Vector Soldier_CheckToss(entvars_t *pev, const Vector &vecSpot1, Vector vecSpot2, float flGravityAdj)
+{
+	TraceResult tr;
+	float flGravity = CVAR_GET_FLOAT("sv_gravity") * flGravityAdj;
+	if (vecSpot2.z - vecSpot1.z > 500.0f)
+		return g_vecZero;
+	UTIL_MakeVectors(pev->angles);
+	vecSpot2 = vecSpot2 + gpGlobals->v_right * (RANDOM_FLOAT(-8, 8) + RANDOM_FLOAT(-16, 16));
+	vecSpot2 = vecSpot2 + gpGlobals->v_forward * (RANDOM_FLOAT(-8, 8) + RANDOM_FLOAT(-16, 16));
+	Vector vecMidPoint = vecSpot1 + (vecSpot2 - vecSpot1) * 0.5f;
+	UTIL_TraceLine(vecMidPoint, vecMidPoint + Vector(0, 0, 500), ignore_monsters, ENT(pev), &tr);
+	vecMidPoint = tr.vecEndPos;
+	vecMidPoint.z -= 15.0f;
+	if (vecMidPoint.z < vecSpot1.z || vecMidPoint.z < vecSpot2.z)
+		return g_vecZero;
+	float time1 = Q_sqrt((vecMidPoint.z - vecSpot1.z) / (0.5f * flGravity));
+	float time2 = Q_sqrt((vecMidPoint.z - vecSpot2.z) / (0.5f * flGravity));
+	if (time1 < 0.1f)
+		return g_vecZero;
+	Vector vel = (vecSpot2 - vecSpot1) / (time1 + time2);
+	vel.z = flGravity * time1;
+	Vector apex = vecSpot1 + vel * time1;
+	apex.z = vecMidPoint.z;
+	UTIL_TraceLine(vecSpot1, apex, dont_ignore_monsters, ENT(pev), &tr);
+	if (tr.flFraction != 1.0f)
+		return g_vecZero;
+	UTIL_TraceLine(vecSpot2, apex, ignore_monsters, ENT(pev), &tr);
+	if (tr.flFraction != 1.0f)
+		return g_vecZero;
+	return vel;
+}
+
+// run cycle of the weapon type like the original SetActivity*Base (ACT_RUN): pistol / grenader / kamakazi
+// "pistol_run", law "law_run", melee "machete_run"
+void CCZSoldier::TrySetRunAnim()
+{
+	if (!Q_strstr(STRING(pev->classname), "terrorist") || !m_bMoving)
+		return;
+	const SoldierGun *g = Soldier_FindGun(STRING(pev->classname));
+	const char *run = nullptr;
+	if (!Q_strcmp(g->name, "pistol") || !Q_strcmp(g->name, "grenader") || !Q_strcmp(g->name, "kamakazi"))
+		run = "pistol_run";
+	else if (!Q_strcmp(g->name, "law"))
+		run = "LAW_run";
+	else if (!Q_strcmp(g->name, "melee"))
+		run = "machete_run";
+	if (!run)
+		return;
+	int s = LookupSequence(run);
+	if (s < 0 || s == pev->sequence)
+		return;
+	pev->sequence = s;
+	pev->frame = 0;
+	ResetSequenceInfo();
+	pev->framerate = 1.0f;
+	m_iMoveSeq = s;
+	if (m_flGroundSpeed < 1.0f)
+		m_flGroundSpeed = 200.0f;
+}
+
 void CCZSoldier::CombatThink()
 {
 	if (!Soldier_IsHostile(pev) || m_bScripted || (pev->spawnflags & 128))
@@ -589,6 +697,99 @@ void CCZSoldier::CombatThink()
 
 	const SoldierGun *g = Soldier_FindGun(STRING(pev->classname));
 	bool melee = (g->dmg <= 0.0f);
+	const bool kamakazi = !Q_strcmp(g->name, "kamakazi");
+	const bool grenader = !Q_strcmp(g->name, "grenader");
+	const bool law = !Q_strcmp(g->name, "law");
+
+	// kamakazi (original CTerrorist::GetBehaviorTypeSchedule, type 9): closer than 64 units to the enemy ->
+	// slTerroristKamakaziBlowup (stop, play "kamakazi"); after the anim: TakeDamage(self, health + 50) and
+	// ExplosionCreate(origin, angles, self, 100, doDamage)
+	if (kamakazi && m_kamaBlow)
+	{
+		if (gpGlobals->time >= m_flBlowAt)
+		{
+			m_kamaBlow = 0;
+			Vector org = pev->origin, ang = pev->angles;
+			edict_t *self = edict();
+			TakeDamage(pev, pev, pev->health + 50.0f, DMG_GENERIC);
+			ExplosionCreate(org, ang, self, 100, TRUE);
+		}
+		return;
+	}
+	if (kamakazi && (pl->pev->origin - pev->origin).Make2D().Length() < 64.0f)
+	{
+		if (m_bMoving)
+			StopMove();
+		PlayAnim("kamakazi");
+		m_kamaBlow = 1;
+		m_flBlowAt = gpGlobals->time + 21.0f / 30.0f; // "kamakazi": 21 frames at 30 fps
+		return;
+	}
+
+	// grenader: grenade leaves the hand at frame 49 of throwgrenade (original event 7): CGrenade::ShootTimed
+	// with the VecCheckToss velocity, fuse 3.5 s; 60% HE (dmg 85), 40% flashbang
+	if (m_flGrenAt > 0)
+	{
+		if (gpGlobals->time >= m_flGrenAt)
+		{
+			m_flGrenAt = 0;
+			UTIL_MakeVectors(pev->angles);
+			Vector src = pev->origin + Vector(0, 0, 60);
+			if (RANDOM_LONG(0, 99) > 40)
+			{
+				CGrenade *gr = CGrenade::ShootTimed2(pev, src, m_vToss, 3.5f, 0, 0);
+				if (gr)
+				{
+					gr->pev->dmg = 85.0f;
+					gr->pev->gravity = 0.5f;
+					gr->pev->friction = 0.8f;
+				}
+			}
+			else
+				CGrenade::ShootTimed(pev, src, m_vToss, 3.5f);
+			m_flNextGren = gpGlobals->time + 6.0f;
+		}
+		return;
+	}
+	if (grenader && visible && !m_bMoving && gpGlobals->time >= m_flNextGren)
+	{
+		// original CheckRangeAttack2: not closer than 128 (horizontal), VecCheckToss(gun, enemy, 0.5)
+		Vector src = pev->origin + Vector(0, 0, 60);
+		float hd = (pl->pev->origin - pev->origin).Make2D().Length();
+		Vector toss = (hd > 128.0f) ? Soldier_CheckToss(pev, src, pl->pev->origin, 0.5f) : g_vecZero;
+		if (toss == g_vecZero)
+			m_flNextGren = gpGlobals->time + 1.0f;
+		else
+		{
+			m_vToss = toss;
+			PlayAnim("throwgrenade");
+			m_flGrenAt = gpGlobals->time + 49.0f / 30.0f;
+			m_flNextShot = m_flGrenAt + 0.8f;
+			return;
+		}
+	}
+
+	// law: LAW_fire, rocket at frame 10 (original event 4 -> ShootLAW: next rocket in 5 s), then law_reload
+	if (m_flLawAt > 0)
+	{
+		if (gpGlobals->time >= m_flLawAt)
+		{
+			m_flLawAt = 0;
+			Vector src = pev->origin + Vector(0, 0, 60);
+			Vector aim = (pl->pev->origin + pl->pev->view_ofs * 0.5f - src).Normalize();
+			aim = (aim + Vector(RANDOM_FLOAT(-1, 1), RANDOM_FLOAT(-1, 1), RANDOM_FLOAT(-1, 1)) * g->spread * cz_enemy_spread.value).Normalize();
+			CBaseEntity *r = CBaseEntity::Create("cz_law_rocket", src + aim * 24.0f, UTIL_VecToAngles(aim), edict());
+			if (r)
+			{
+				r->pev->velocity = aim * 1500.0f;
+				r->pev->angles = UTIL_VecToAngles(r->pev->velocity);
+			}
+			EMIT_SOUND(ENT(pev), CHAN_WEAPON, "weapons/rocketfire1.wav", VOL_NORM, ATTN_NORM);
+			pev->effects |= EF_MUZZLEFLASH;
+			m_flFlashOff = gpGlobals->time + 0.08f;
+		}
+		return;
+	}
 
 	// face the player
 	if (!m_bMoving && (visible || dist < 300.0f))
@@ -607,6 +808,7 @@ void CCZSoldier::CombatThink()
 		{
 			m_flNextChase = gpGlobals->time + (melee ? 0.5f : 0.8f);
 			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true);
+			TrySetRunAnim();
 		}
 		else if (m_bMoving && visible && dist < hold)
 			StopMove();
@@ -655,7 +857,13 @@ void CCZSoldier::CombatThink()
 		CBeam *bm = (CBeam *)(CBaseEntity *)m_hLaser;
 		if (!bm)
 		{
-			bm = CBeam::BeamCreate("sprites/laserbeam.spr", 3);
+			CCZLaser *lz = GetClassPtr<CCSBeam>((CCZLaser *)nullptr);
+			MAKE_STRING_CLASS("beam", lz->pev);
+			lz->BeamInit("sprites/laserbeam.spr", 3);
+			lz->m_hTarget = pl;
+			lz->SetThink(&CCZLaser::Track);
+			lz->pev->nextthink = gpGlobals->time + 0.01f;
+			bm = lz;
 			if (bm)
 			{
 				bm->PointEntInit(chest, entindex());
@@ -667,10 +875,7 @@ void CCZSoldier::CombatThink()
 			}
 		}
 		if (bm)
-		{
-			bm->SetStartPos(chest);
-			bm->RelinkBeam();
-		}
+			((CCZLaser *)bm)->m_hTarget = pl;
 		CSprite *gl = (CSprite *)(CBaseEntity *)m_hLaserGlow;
 		if (!gl && g_czLaserGlow)
 		{
@@ -693,6 +898,20 @@ void CCZSoldier::CombatThink()
 			pev->frame = 0;
 			ResetSequenceInfo();
 		}
+	}
+
+	if (kamakazi)
+		return; // only runs at the player and blows up (above)
+
+	if (law)
+	{
+		if (visible && !m_bMoving && gpGlobals->time >= m_flNextShot)
+		{
+			PlayAnim("LAW_fire");
+			m_flLawAt = gpGlobals->time + 10.0f / 30.0f;
+			m_flNextShot = gpGlobals->time + 5.0f;
+		}
+		return;
 	}
 
 	if (melee)
@@ -749,7 +968,7 @@ void CCZSoldier::OpenDoorAhead()
 void CCZSoldier::Precache()
 {
 	PRECACHE_MODEL("models/seal.mdl");
-	if (!FStringNull(pev->model) && Q_strstr(STRING(pev->model), "sealB"))
+	if (!FStringNull(pev->model) && Soldier_ModelHas(pev, "sealb"))
 		PRECACHE_MODEL("models/sealB.mdl");
 	PRECACHE_MODEL("models/terror.mdl");
 	PRECACHE_MODEL("models/leet.mdl");
@@ -758,13 +977,18 @@ void CCZSoldier::Precache()
 		g_czLaserBeam = PRECACHE_MODEL("sprites/laserbeam.spr");
 		g_czLaserGlow = PRECACHE_MODEL("sprites/flare3.spr"); // the original SetupLaserGlow sprite
 	}
-	if (!FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
+	if (!FStringNull(pev->model) && Soldier_ModelHas(pev, "leet_lo"))
 		PRECACHE_MODEL((char *)STRING(pev->model));
 	PRECACHE_SOUND("ct/ct_blinded_am.wav");
 	PRECACHE_SOUND("ct/ct_incoming_am.wav");
 	PRECACHE_SOUND("ct/ct_damnsmoke_am.wav");
 	PRECACHE_SOUND("t/t_coughc_am.wav");
 	PRECACHE_SOUND("player/headshot1.wav");
+	if (Q_strstr(STRING(pev->classname), "_law"))
+	{
+		PRECACHE_SOUND("weapons/rocketfire1.wav");
+		UTIL_PrecacheOther("cz_law_rocket");
+	}
 	if (Q_strstr(STRING(pev->classname), "terrorist"))
 	{
 		if (Soldier_FindGun(STRING(pev->classname))->sound)
@@ -792,9 +1016,9 @@ void CCZSoldier::Spawn()
 	m_react = 0;
 	const bool isTerror = Q_strstr(STRING(pev->classname), "terrorist") != nullptr;
 	const char *mdl = isTerror ? "models/leet.mdl" : "models/seal.mdl";
-	if (isTerror && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
+	if (isTerror && !FStringNull(pev->model) && Soldier_ModelHas(pev, "leet_lo"))
 		mdl = "models/leet_lo.mdl"; // the mapper picked the low detail model
-	const bool sealB = !isTerror && !FStringNull(pev->model) && Q_strstr(STRING(pev->model), "sealB");
+	const bool sealB = !isTerror && !FStringNull(pev->model) && Soldier_ModelHas(pev, "sealb");
 	if (sealB)
 		mdl = "models/sealB.mdl"; // helicopter crew of cz_recoil-intro: body/skin are given by the map
 	pev->model = MAKE_STRING(mdl);
@@ -804,7 +1028,9 @@ void CCZSoldier::Spawn()
 	pev->solid = SOLID_SLIDEBOX;
 	pev->takedamage = DAMAGE_NO;
 	pev->health = 100;
-	m_flMaxHealth = 100;
+	if (m_flHealthMul > 0.0f)
+		pev->health = 100.0f * m_flHealthMul;
+	m_flMaxHealth = pev->health;
 	pev->flags |= FL_MONSTER;
 	pev->deadflag = DEAD_NO;
 	m_bDead = false;
@@ -855,6 +1081,8 @@ void CCZSoldier::Spawn()
 		}
 	}
 	Settle();
+	if (!g_czMakerSpawn)
+		m_flSettleAt = gpGlobals->time + 0.1f;
 	if (m_bMade && !m_hPlat)
 	{
 		// made in the open (not on the caged lift): an ordinary, solid, killable soldier
@@ -1103,6 +1331,16 @@ void CCZSoldier::AnimThink()
 	{
 		DeadThink();
 		return;
+	}
+
+	// original CBaseMonster::StartMonster drops the monster to the floor in its first think, when all the
+	// map entities exist: the gunner on the truck of cz_recoil2 stands on the invisible func_wall *120
+	// (at Spawn time that wall was not there yet and he fell into the ground inside the truck)
+	if (m_flSettleAt > 0 && gpGlobals->time >= m_flSettleAt)
+	{
+		m_flSettleAt = 0;
+		if (!m_bMoving && !m_bScripted)
+			Settle();
 	}
 
 	if (m_react == 0)
@@ -1435,6 +1673,14 @@ public:
 	int m_cNumMonsters;
 	int m_cMonstersMade;
 	float m_flSpawnDelay;
+
+	// original CMonsterMaker::alwaysPassKeyValues() == true: the other keys of the maker (cantmove, idleanim,
+	// deathanim, invulnerable, TriggerTarget, skin, body, head, monstermodel ...) are given to the new monster
+	// with DispatchKeyValue before DispatchSpawn (cz.so CMonsterMaker::MakeMonster 0xc85b0)
+	enum { MAX_PASS_KV = 24 };
+	int m_nPassKV;
+	string_t m_passKey[MAX_PASS_KV];
+	string_t m_passVal[MAX_PASS_KV];
 };
 
 TYPEDESCRIPTION CCZMonsterMaker::m_SaveData[] =
@@ -1443,6 +1689,9 @@ TYPEDESCRIPTION CCZMonsterMaker::m_SaveData[] =
 	DEFINE_FIELD(CCZMonsterMaker, m_cNumMonsters, FIELD_INTEGER),
 	DEFINE_FIELD(CCZMonsterMaker, m_cMonstersMade, FIELD_INTEGER),
 	DEFINE_FIELD(CCZMonsterMaker, m_flSpawnDelay, FIELD_FLOAT),
+	DEFINE_FIELD(CCZMonsterMaker, m_nPassKV, FIELD_INTEGER),
+	DEFINE_ARRAY(CCZMonsterMaker, m_passKey, FIELD_STRING, CCZMonsterMaker::MAX_PASS_KV),
+	DEFINE_ARRAY(CCZMonsterMaker, m_passVal, FIELD_STRING, CCZMonsterMaker::MAX_PASS_KV),
 };
 IMPLEMENT_SAVERESTORE(CCZMonsterMaker, CBaseDelay)
 
@@ -1473,6 +1722,21 @@ void CCZMonsterMaker::KeyValue(KeyValueData *pkvd)
 	}
 	else if (FStrEq(pkvd->szKeyName, "m_imaxlivechildren"))
 	{
+		pkvd->fHandled = TRUE;
+	}
+	else if (FStrEq(pkvd->szKeyName, "monstermodel")
+		|| (!FStrEq(pkvd->szKeyName, "targetname") && !FStrEq(pkvd->szKeyName, "target") && !FStrEq(pkvd->szKeyName, "netname")
+			&& !FStrEq(pkvd->szKeyName, "origin") && !FStrEq(pkvd->szKeyName, "angle") && !FStrEq(pkvd->szKeyName, "angles")
+			&& !FStrEq(pkvd->szKeyName, "spawnflags") && !FStrEq(pkvd->szKeyName, "classname") && !FStrEq(pkvd->szKeyName, "wait")
+			&& !FStrEq(pkvd->szKeyName, "killtarget")))
+	{
+		if (m_nPassKV < MAX_PASS_KV)
+		{
+			m_passKey[m_nPassKV] = ALLOC_STRING(FStrEq(pkvd->szKeyName, "monstermodel") ? "model" : pkvd->szKeyName);
+			m_passVal[m_nPassKV] = ALLOC_STRING(pkvd->szValue);
+			m_nPassKV++;
+		}
+		// "model" of the maker itself must stay empty (it is a point entity)
 		pkvd->fHandled = TRUE;
 	}
 	else
@@ -1522,7 +1786,38 @@ void CCZMonsterMaker::MakeMonster()
 		return;
 
 	g_czMakerSpawn = true;
-	CBaseEntity *pNew = CBaseEntity::Create(STRING(m_iszMonsterType), pev->origin, pev->angles, edict());
+	CBaseEntity *pNew = nullptr;
+	edict_t *pent = CREATE_NAMED_ENTITY(m_iszMonsterType);
+	if (!FNullEnt(pent))
+	{
+		entvars_t *cp = VARS(pent);
+		cp->origin = pev->origin;
+		cp->angles = pev->angles;
+		cp->owner = edict();
+		for (int i = 0; i < m_nPassKV; i++)
+		{
+			KeyValueData kvd;
+			kvd.szClassName = (char *)STRING(m_iszMonsterType);
+			kvd.szKeyName = (char *)STRING(m_passKey[i]);
+			kvd.szValue = (char *)STRING(m_passVal[i]);
+			kvd.fHandled = FALSE;
+			DispatchKeyValue(pent, &kvd);
+			if (!kvd.fHandled)
+			{
+				// what the engine would set from the entity text (entvars fields)
+				if (FStrEq(kvd.szKeyName, "model")) cp->model = ALLOC_STRING(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "skin")) cp->skin = Q_atoi(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "body")) cp->body = Q_atoi(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "health")) cp->health = Q_atof(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "rendermode")) cp->rendermode = Q_atoi(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "renderamt")) cp->renderamt = Q_atof(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "renderfx")) cp->renderfx = Q_atoi(kvd.szValue);
+				else if (FStrEq(kvd.szKeyName, "scale")) cp->scale = Q_atof(kvd.szValue);
+			}
+		}
+		DispatchSpawn(pent);
+		pNew = CBaseEntity::Instance(pent);
+	}
 	g_czMakerSpawn = false;
 	if (!pNew)
 	{

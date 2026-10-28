@@ -23,6 +23,8 @@ public:
 	void StartMove(const Vector &target, float yaw, bool run);
 	void StopMove();
 	bool MoveStep(float stopDist, bool checkWalls);
+	bool MoveStepImpl(float stopDist, bool checkWalls);
+	void TouchTriggers();
 	void BuildPath(const Vector &goal);
 	void StartFollow(CBaseEntity *leader);
 	void StopFollow();

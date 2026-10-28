@@ -544,9 +544,18 @@ void CMonsterNPC::KeyValue(KeyValueData *pkvd)
 		if (m_spawned && !m_bDead) // a corpse keeps its death pose (the map's death trigger also switches idleanim)
 			ApplyIdle(pkvd->szValue);
 	}
+	else if (FStrEq(pkvd->szKeyName, "nopvs"))
+	{
+		// CZ:DS key (cz_recoil tower01 / reactor01): sent to the client even outside the player's PVS - the tower
+		// stands outside the world behind the sky and falls at the big explosion
+		if (Q_atoi(pkvd->szValue))
+			pev->effects |= EF_FORCEVISIBILITY;
+		pkvd->fHandled = TRUE;
+	}
 	else if (FStrEq(pkvd->szKeyName, "usetarget"))
 	{
-		m_useTarget = ALLOC_STRING(pkvd->szValue);
+		// original CBaseMonster::KeyValue: "default" clears the use target -> the default +use (follow the player)
+		m_useTarget = FStrEq(pkvd->szValue, "default") ? iStringNull : ALLOC_STRING(pkvd->szValue);
 		pkvd->fHandled = TRUE;
 	}
 	else if (FStrEq(pkvd->szKeyName, "deathanim"))
@@ -1020,7 +1029,34 @@ void CMonsterNPC::StopMove()
 }
 
 // moves towards m_vMoveTarget; returns true when the target is reached
+// the steps that put the actor somewhere with UTIL_SetOrigin (ghost walk of the scripted soldiers) do not touch
+// triggers in the engine: do it here, so "monsters can trigger" brushes work (cz_recoil: trigger_once *3 in front of
+// deltaDoor - delta walks into it, then fuck_you_valve opens the door)
 bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
+{
+	Vector before = pev->origin;
+	bool r = MoveStepImpl(stopDist, checkWalls);
+	if ((pev->origin - before).Length() > 0.1f)
+		TouchTriggers();
+	return r;
+}
+
+void CMonsterNPC::TouchTriggers()
+{
+	CBaseEntity *list[64];
+	int n = UTIL_EntitiesInBox(list, ARRAYSIZE(list), pev->absmin, pev->absmax, 0);
+	for (int i = 0; i < n; i++)
+	{
+		CBaseEntity *t = list[i];
+		if (!t || t == this || t->pev->solid != SOLID_TRIGGER || !t->pev->classname)
+			continue;
+		if (Q_strncmp(STRING(t->pev->classname), "trigger_", 8))
+			continue;
+		t->Touch(this);
+	}
+}
+
+bool CMonsterNPC::MoveStepImpl(float stopDist, bool checkWalls)
 {
 	float dt = gpGlobals->time - m_flLastMove;
 	m_flLastMove = gpGlobals->time;
@@ -1511,7 +1547,8 @@ CMonsterNPC *CCZScriptedSequence::FindNPC()
 	CBaseEntity *pEnt = nullptr;
 	while ((pEnt = UTIL_FindEntityByTargetname(pEnt, STRING(m_iszEntity))))
 	{
-		if (FClassnameIs(pEnt->pev, "monster_npc") || Cz_IsSoldierClass(pEnt))
+		// monster_generic too: in the original any CBaseMonster plays scripts (cz_recoil2 seqTruck: the truck crash04)
+		if (FClassnameIs(pEnt->pev, "monster_npc") || FClassnameIs(pEnt->pev, "monster_generic") || Cz_IsSoldierClass(pEnt))
 			return static_cast<CMonsterNPC *>(pEnt);
 	}
 
@@ -1768,3 +1805,28 @@ void Cz_NpcSpeak(CBaseEntity *pSpeaker, float seconds)
 	if (pNpc->pev->nextthink <= 0 || pNpc->pev->nextthink > gpGlobals->time + 0.05f)
 		pNpc->pev->nextthink = gpGlobals->time + 0.03f;
 }
+
+// ---------------------------------------------------------------------------
+// func_model_brush (original cz.so CFuncModelBrush::Spawn 0x7cb40): a brush that is not solid, does not move,
+// FL_WORLDBRUSH, rendermode texture with renderamt 1 (practically invisible). The CZ engine used it to draw the
+// targeted model in front of the sky; here it only exists so the map loads without "No spawn function".
+// ---------------------------------------------------------------------------
+class CFuncModelBrush: public CBaseEntity
+{
+public:
+	virtual void Spawn()
+	{
+		pev->angles = g_vecZero;
+		pev->movetype = MOVETYPE_PUSH;
+		pev->solid = SOLID_BSP;
+		SET_MODEL(ENT(pev), STRING(pev->model));
+		pev->flags |= FL_WORLDBRUSH;
+		pev->renderamt = 1;
+		pev->rendermode = kRenderTransTexture;
+		pev->movetype = MOVETYPE_NONE;
+		pev->solid = SOLID_NOT;
+		pev->effects = 0;
+	}
+	virtual void KeyValue(KeyValueData *pkvd) { pkvd->fHandled = FALSE; CBaseEntity::KeyValue(pkvd); }
+};
+LINK_ENTITY_TO_CLASS(func_model_brush, CFuncModelBrush, CCSFuncModelBrush)
