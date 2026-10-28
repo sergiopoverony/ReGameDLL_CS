@@ -1250,6 +1250,14 @@ void CSprite::Spawn()
 		pev->angles.z = pev->angles.y;
 		pev->angles.y = 0;
 	}
+
+	// CZ:DS diagnostics: the fire sprites (XFFloor.spr) of cz_recoil are not visible - what does the server have?
+	if (pev->model && Q_strstr(STRING(pev->model), "XFFloor"))
+	{
+		ALERT(at_console, "env_sprite XFFloor: modelindex=%d frames=%.0f rendermode=%d renderamt=%.0f scale=%.2f framerate=%.1f effects=%d origin=%.0f %.0f %.0f\n",
+			pev->modelindex, m_maxFrame + 1, pev->rendermode, pev->renderamt, pev->scale, pev->framerate, pev->effects,
+			pev->origin.x, pev->origin.y, pev->origin.z);
+	}
 }
 
 void CSprite::Restart()
