@@ -648,20 +648,28 @@ void CCZSoldier::CombatThink()
 	// Both ends follow the models on the client, so the beam stays on the player without lag.
 	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam)
 	{
+		// the original ties the far end to the player entity (EntsInit); in Xash that end fell to the sniper's feet
+		// (user test 28.10), so the player end is a point on the chest, moved every think; the rifle end stays on
+		// attachment 2 of the sniper model (the glow there is placed correctly, so the attachment exists)
+		Vector chest = pl->pev->origin + pl->pev->view_ofs * 0.5f;
 		CBeam *bm = (CBeam *)(CBaseEntity *)m_hLaser;
 		if (!bm)
 		{
 			bm = CBeam::BeamCreate("sprites/laserbeam.spr", 3);
 			if (bm)
 			{
-				bm->EntsInit(entindex(), pl->entindex());
-				bm->SetStartAttachment(2);
-				bm->SetFlags(BEAM_FSHADEOUT);
+				bm->PointEntInit(chest, entindex());
+				bm->SetEndAttachment(2);
 				bm->SetColor(255, 0, 0);
-				bm->SetBrightness(64);
+				bm->SetBrightness(80); // the original 64 with shade-out was hardly visible (user)
 				bm->pev->spawnflags |= SF_BEAM_TEMPORARY;
 				m_hLaser = bm;
 			}
+		}
+		if (bm)
+		{
+			bm->SetStartPos(chest);
+			bm->RelinkBeam();
 		}
 		CSprite *gl = (CSprite *)(CBaseEntity *)m_hLaserGlow;
 		if (!gl && g_czLaserGlow)
@@ -669,7 +677,7 @@ void CCZSoldier::CombatThink()
 			gl = CSprite::SpriteCreate("sprites/flare3.spr", pev->origin, FALSE);
 			if (gl)
 			{
-				gl->SetTransparency(kRenderGlow, 255, 0, 0, 255, kRenderFxNoDissipation);
+				gl->SetTransparency(kRenderGlow, 255, 0, 0, 150, kRenderFxNoDissipation); // original 255 - too bright (user)
 				gl->SetAttachment(edict(), 2);
 				m_hLaserGlow = gl;
 			}

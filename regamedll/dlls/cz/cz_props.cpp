@@ -73,8 +73,8 @@ void CItemGeneric::KeyValue(KeyValueData *pkvd)
 	}
 	else if (FStrEq(pkvd->szKeyName, "lightmultiplier"))
 	{
-		// CZ: per-model light boost = renderfx 25 (Xash kRenderFxLightMultiplier), value in iuser4 (light *= iuser4 / 10)
-		m_iLightMul = Q_atoi(pkvd->szValue);
+		// like the original CGenericItem::KeyValue: value * 10 (1.5 -> 15); the renderer does light *= iuser4 / 10
+		m_iLightMul = int(Q_atof(pkvd->szValue) * 10.0f);
 		ALERT(at_console, "item_generic: key lightmultiplier=%d\n", m_iLightMul);
 		pkvd->fHandled = TRUE;
 	}
@@ -99,13 +99,11 @@ void CItemGeneric::ApplySequence(const char *name)
 
 void CItemGeneric::Precache()
 {
-	// light *= iuser4 / 10 in the engine: values <= 10 would only darken the model, so they are ignored
-	if (m_iLightMul > 10)
+	// like the original CGenericItem::Spawn: any key value -> renderfx kRenderFxLightMultiplier, iuser4 = value * 10
+	if (m_iLightMul)
 	{
 		pev->renderfx = kRenderFxLightMultiplier;
-		pev->iuser4 = 10 + m_iLightMul; // Xash: light *= iuser4/10, 10 = neutral
-		// iuser4 may not survive the entity delta: the multiplier also travels in renderamt (unused for rendermode normal)
-		pev->renderamt = (10 + m_iLightMul) > 255 ? 255 : (10 + m_iLightMul);
+		pev->iuser4 = clamp(m_iLightMul, 0, 255);
 	}
 	if (!FStringNull(pev->model))
 		PRECACHE_MODEL((char *)STRING(pev->model));
@@ -127,12 +125,10 @@ void CItemGeneric::Spawn()
 	pev->takedamage = DAMAGE_NO;
 
 	ALERT(at_console, "item_generic: spawn %s lightmul=%d\n", STRING(pev->model), m_iLightMul);
-	if (m_iLightMul > 10)
+	if (m_iLightMul)
 	{
 		pev->renderfx = kRenderFxLightMultiplier;
-		pev->iuser4 = 10 + m_iLightMul; // Xash: light *= iuser4/10, 10 = neutral
-		pev->renderamt = (10 + m_iLightMul) > 255 ? 255 : (10 + m_iLightMul);
-		ALERT(at_console, "item_generic: %s lightmul=%d renderfx=%d renderamt=%.0f\n", STRING(pev->model), m_iLightMul, pev->renderfx, pev->renderamt);
+		pev->iuser4 = clamp(m_iLightMul, 0, 255);
 	}
 
 	InitBoneControllers();
@@ -492,6 +488,7 @@ TYPEDESCRIPTION CMonsterNPC::m_SaveData[] =
 	DEFINE_FIELD(CMonsterNPC, m_head, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_spawned, FIELD_INTEGER),
 	DEFINE_FIELD(CMonsterNPC, m_bScripted, FIELD_CHARACTER),
+	DEFINE_FIELD(CMonsterNPC, m_hCine, FIELD_EHANDLE),
 	DEFINE_FIELD(CMonsterNPC, m_bMoving, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bArrived, FIELD_CHARACTER),
 	DEFINE_FIELD(CMonsterNPC, m_bFollow, FIELD_CHARACTER),
@@ -1391,6 +1388,7 @@ public:
 public:
 	void EXPORT AutoStart();
 	void EXPORT ScriptThink();
+	void EXPORT RetryThink();
 	void StartPlay();
 	void Finish();
 	CMonsterNPC *FindNPC();
@@ -1544,6 +1542,20 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 		return;
 	}
 
+	// like the original CBaseMonster::CanPlaySequence / CCineMonster::CineThink: an actor that is busy with another
+	// script is not taken over - this one waits and tries again every second (cz_recoil: delta's gesture01..04 and
+	// seqDeltaDoor overlapped; the first one "finished" on the walk of the last one, moved him and broke the door scene)
+	CCZScriptedSequence *busy = (CCZScriptedSequence *)(CBaseEntity *)npc->m_hCine;
+	if (busy && busy != this && busy->m_state != 0)
+	{
+		ALERT(at_console, "scripted_sequence '%s': '%s' is busy with '%s', retry in 1 s\n", STRING(pev->targetname),
+			STRING(npc->pev->targetname), STRING(busy->pev->targetname));
+		SetThink(&CCZScriptedSequence::RetryThink);
+		pev->nextthink = gpGlobals->time + 1.0f;
+		return;
+	}
+	npc->m_hCine = this;
+
 	ALERT(at_console, "scripted_sequence '%s': '%s' (%s) at %.0f %.0f %.0f %s to %.0f %.0f %.0f play '%s'\n", STRING(pev->targetname), STRING(npc->pev->targetname),
 		STRING(npc->pev->classname), npc->pev->origin.x, npc->pev->origin.y, npc->pev->origin.z, m_fMoveTo == 2 ? "runs" : (m_fMoveTo == 1 ? "walks" : "acts"), pev->origin.x, pev->origin.y, pev->origin.z, STRING(m_iszPlay));
 	m_hNpc = npc;
@@ -1598,6 +1610,12 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	}
 
 	StartPlay();
+}
+
+void CCZScriptedSequence::RetryThink()
+{
+	SetThink(nullptr);
+	Use(nullptr, nullptr, USE_TOGGLE, 0);
 }
 
 void CCZScriptedSequence::StartPlay()
@@ -1660,6 +1678,13 @@ void CCZScriptedSequence::ScriptThink()
 void CCZScriptedSequence::Finish()
 {
 	CMonsterNPC *npc = (CMonsterNPC *)(CBaseEntity *)m_hNpc;
+	if (npc && npc->m_bDead)
+	{
+		// died during the script: the body keeps its death animation
+		if ((CBaseEntity *)npc->m_hCine == this)
+			npc->m_hCine = nullptr;
+		npc = nullptr;
+	}
 	if (npc && m_state == 2)
 	{
 		// the animation carries the actor away from his mark (a roll behind a crate): keep him where it ended
@@ -1709,6 +1734,8 @@ void CCZScriptedSequence::Finish()
 	{
 		npc->m_bScripted = false;
 		npc->ApplyIdle(FStringNull(npc->m_idleAnim) ? "idle1" : STRING(npc->m_idleAnim));
+		if ((CBaseEntity *)npc->m_hCine == this)
+			npc->m_hCine = nullptr;
 	}
 
 	m_state = 0;

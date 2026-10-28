@@ -3297,6 +3297,11 @@ BOOL EXT_FUNC CHalfLifeMultiplay::__API_HOOK(FShouldSwitchWeapon)(CBasePlayer *p
 		return FALSE;
 	}
 
+	// CZ:DS: like the original CHalfLifeRules::FShouldSwitchWeapon - a picked up weapon always goes into the hands
+	// (cz_recoil: the M60 has the same weight as the M4A1 and stayed in the inventory)
+	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3))
+		return TRUE;
+
 #ifdef REGAMEDLL_FIXES
 	if (pPlayer->pev->waterlevel == 3)
 	{

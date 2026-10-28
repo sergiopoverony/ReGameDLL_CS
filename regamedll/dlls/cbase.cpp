@@ -327,6 +327,13 @@ int DispatchSpawn(edict_t *pent)
 		// that would touch too much code for me to do that right now.
 		pEntity = GET_PRIVATE<CBaseEntity>(pent);
 
+		// CZ:DS: the map's light multiplier for monsters, items, weapons and ammo (see world.cpp)
+		if (pEntity)
+		{
+			extern void Cz_ApplyWorldLight(CBaseEntity *pEntity);
+			Cz_ApplyWorldLight(pEntity);
+		}
+
 		if (pEntity)
 		{
 			if (g_pGameRules && !g_pGameRules->IsAllowedToSpawn(pEntity))

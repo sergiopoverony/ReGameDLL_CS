@@ -38,6 +38,7 @@ public:
 	int m_head;
 	int m_spawned;
 	bool m_bScripted; // driven by scripted_sequence
+	EHANDLE m_hCine;  // the scripted_sequence that owns the actor now (original CBaseMonster::m_pCine)
 	bool m_bMoving;   // walking to m_vMoveTarget (scripted)
 	bool m_bArrived;
 	bool m_bFollow;   // follows the player after +use

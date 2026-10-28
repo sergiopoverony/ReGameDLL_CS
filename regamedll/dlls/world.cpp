@@ -464,6 +464,7 @@ struct CzWorldEnv
 	char grassSprite[128];
 	float grassFadeDist, grassMinHeight, grassMaxHeight;
 	int grassDensity;
+	float lightMul; // worldspawn "lightmultiplier" (original CWorld::m_lightMultiplier -> cvar lightmultiplier)
 };
 static CzWorldEnv g_czEnv;
 
@@ -501,10 +502,31 @@ static bool Cz_EnvKeyValue(KeyValueData *pkvd)
 	else if (FStrEq(k, "grassMinHeight")) g_czEnv.grassMinHeight = v;
 	else if (FStrEq(k, "grassMaxHeight")) g_czEnv.grassMaxHeight = v;
 	else if (FStrEq(k, "grassDensity")) g_czEnv.grassDensity = Q_atoi(pkvd->szValue);
+	else if (FStrEq(k, "lightmultiplier")) g_czEnv.lightMul = v;
 	else
 		return false;
 	pkvd->fHandled = TRUE;
 	return true;
+}
+
+// like the original CBaseMonster::MonsterInit / CItem::Spawn / CBasePlayerWeapon::Spawn / CBasePlayerAmmo::Spawn:
+// with the map's lightmultiplier >= 0.1 the model gets renderfx kRenderFxLightMultiplier and iuser4 = the value
+// (the renderer multiplies the model light by iuser4 / 10: cz_recoil "30" = 3 times brighter). Called after Spawn().
+void Cz_ApplyWorldLight(CBaseEntity *pEntity)
+{
+	if (!pEntity || !pEntity->pev->classname)
+		return;
+	Cz_EnvCheckMap();
+	if (g_czEnv.lightMul < 0.1f)
+		return;
+	const char *c = STRING(pEntity->pev->classname);
+	bool item = !Q_strncmp(c, "item_", 5) && Q_strcmp(c, "item_generic"); // item_generic has its own key
+	if (!item && Q_strncmp(c, "monster_", 8) && Q_strncmp(c, "weapon_", 7) && Q_strncmp(c, "ammo_", 5) && Q_strncmp(c, "cz_weapon_", 10))
+		return;
+	if (pEntity->pev->renderfx == kRenderFxLightMultiplier)
+		return;
+	pEntity->pev->renderfx = kRenderFxLightMultiplier;
+	pEntity->pev->iuser4 = clamp(int(g_czEnv.lightMul), 0, 255);
 }
 
 // sent with the first HUD update of the player (the original does it in SendInitClientMessages)
