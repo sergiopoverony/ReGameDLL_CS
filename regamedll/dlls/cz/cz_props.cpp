@@ -759,22 +759,6 @@ void CMonsterNPC::AnimThink()
 		pev->effects &= ~EF_NOINTERP;
 	}
 
-	// live tuning: cz_npc_lift raises every soldier by N units (for models that sink into the floor)
-	if (m_bAllowGhost)
-	{
-		static bool reg = false;
-		static cvar_t cvLift = { "cz_npc_lift", "0", 0, 0.0f, nullptr };
-		if (!reg) { CVAR_REGISTER(&cvLift); reg = true; }
-		float want = CVAR_GET_FLOAT("cz_npc_lift");
-		if (want != m_flLiftApplied)
-		{
-			Vector o = pev->origin;
-			o.z += want - m_flLiftApplied;
-			m_flLiftApplied = want;
-			UTIL_SetOrigin(pev, o);
-		}
-	}
-
 	// death animation finished: swap to the "_dead" model (idle only)
 	if (m_bDead && !m_bDeadSwapped && m_fSequenceFinished && !FStringNull(m_deathAnim))
 	{
@@ -1001,36 +985,12 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 			else
 				PlaySeq("idle1");
 		}
-		{
-			// debugging aid: cz_walk_seq N forces a sequence index for every moving NPC
-			static cvar_t cvWalkSeq = { "cz_walk_seq", "-1", 0, -1.0f, nullptr };
-			static bool reg = false;
-			if (!reg) { CVAR_REGISTER(&cvWalkSeq); reg = true; }
-			int force = (int)CVAR_GET_FLOAT("cz_walk_seq");
-			studiohdr_t *hdr = (studiohdr_t *)GET_MODEL_PTR(ENT(pev));
-			if (hdr && force >= 0 && force < hdr->numseq)
-			{
-				pev->sequence = force;
-				pev->frame = 0;
-				ResetSequenceInfo();
-				how = "forced";
-			}
-			static int dumped = 0;
-			if (hdr && dumped != pev->modelindex)
-			{
-				dumped = pev->modelindex;
-				mstudioseqdesc_t *sd = (mstudioseqdesc_t *)((byte *)hdr + hdr->seqindex);
-				for (int i = 0; i < hdr->numseq; i++)
-					ALERT(at_console, "seqdump %s #%d '%s' act %d fps %.0f lin %.0f/%.0f flags %d\n", STRING(pev->model), i, sd[i].label, sd[i].activity, sd[i].fps, sd[i].linearmovement.x, sd[i].linearmovement.y, sd[i].flags);
-			}
-		}
 		if (pev->sequence == oldSeq)
 			pev->frame = oldFrame; // keep the walk cycle running between legs
 		pev->framerate = 1.0f;
 		if (m_flFrameRate < 0.1f)
 			m_flFrameRate = 1.0f;
 		m_iMoveSeq = pev->sequence;
-		ALERT(at_console, "move anim: '%s' seq %d (%s) speed %.0f\n", STRING(pev->classname), pev->sequence, how, m_flGroundSpeed);
 	}
 
 	m_bSitting = false;
@@ -1296,13 +1256,6 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 		Vector mv = pev->origin - origin0;
 		mv.z = 0;
 		bool stuck = mv.Length() < step * 0.3f;
-		static float nextLog = 0;
-		if (gpGlobals->time >= nextLog && (stuck || m_bAllowGhost))
-		{
-			nextLog = gpGlobals->time + 1.0f;
-			ALERT(at_console, "walk: '%s' org %.0f %.0f %.0f moved %.2f of %.2f goal %.0f %s\n", STRING(pev->classname),
-				pev->origin.x, pev->origin.y, pev->origin.z, mv.Length(), step, d, stuck ? "STUCK" : "ok");
-		}
 		if (stuck && m_bAllowGhost)
 		{
 			m_flGhostUntil = gpGlobals->time + 0.6f;
