@@ -597,6 +597,8 @@ bool Cz_KillGeneric(CBaseEntity *pEnt)
 	if (m->m_bHasDeathAngle)
 		m->pev->angles.y = m->m_flDeathAngle;
 	m->m_bDead = true;
+	m->pev->deadflag = DEAD_DEAD; // dead for everybody (grenade reactions, targeting)
+	m->pev->takedamage = DAMAGE_NO;
 	m->m_bScripted = false;
 	m->m_bMoving = false;
 	m->m_bFollow = false;

@@ -1065,6 +1065,11 @@ static void Soldier_VoiceN(CBaseEntity *e, const char *base, int count)
 
 void CCZSoldier::React(int type)
 {
+	// a dead soldier does not react (cz_recoil: flyingT killed by trigger_killtarget, then the smoke grenades of
+	// env_liveammoshooter made the body cower - the death animation was replaced and the body stood at its spot)
+	if (m_bDead || pev->deadflag != DEAD_NO)
+		return;
+
 	m_react = type;
 	m_step = 0;
 

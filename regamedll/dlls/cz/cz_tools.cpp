@@ -819,7 +819,6 @@ void CCZRcCtl::CtlThink()
 				UTIL_Remove(bomb); // all 20 slots taken (original AddToBombArray refuses as well)
 				bomb = nullptr;
 			}
-			pl->ResetMaxSpeed();
 			g_flRcPlantTime = now;
 			if (g_rcCharges > 0)
 				g_rcCharges--;
@@ -828,6 +827,8 @@ void CCZRcCtl::CtlThink()
 			Cz_QueueAnim(0, 1, 1.33f);
 			g_rcBusy = now + 1.33f;
 			g_rcState = 2;
+			// only now: the weapon's GetMaxSpeed returns 1 while the state is 1 (planting) - the player stayed stuck
+			pl->ResetMaxSpeed();
 			Cz_RcFinish(g_hRcZone);
 			Cz_SendTool();
 			ALERT(at_console, "rc bomb planted at %.0f %.0f %.0f (mines left %d, planted %d)\n", g_rcPos.x, g_rcPos.y, g_rcPos.z, g_rcCharges, Cz_RcBombCount());
