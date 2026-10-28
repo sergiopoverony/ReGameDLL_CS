@@ -66,6 +66,7 @@ public:
 	float m_flNextDoor = 0;
 	float m_flFlashOff = 0;
 	EHANDLE m_hLaser;
+	EHANDLE m_hLaserGlow;
 	Vector m_vLaserAim;
 	Vector m_vLaserDot;
 	float m_flLaserT = 0;
@@ -120,6 +121,7 @@ TYPEDESCRIPTION CCZSoldier::m_SaveData[] =
 	DEFINE_FIELD(CCZSoldier, m_flNextChase, FIELD_TIME),
 	DEFINE_FIELD(CCZSoldier, m_flFlashOff, FIELD_TIME),
 	DEFINE_FIELD(CCZSoldier, m_hLaser, FIELD_EHANDLE),
+	DEFINE_FIELD(CCZSoldier, m_hLaserGlow, FIELD_EHANDLE),
 	DEFINE_FIELD(CCZSoldier, m_vLaserAim, FIELD_VECTOR),
 	DEFINE_FIELD(CCZSoldier, m_vLaserDot, FIELD_VECTOR),
 	DEFINE_FIELD(CCZSoldier, m_flLaserT, FIELD_TIME),
@@ -395,6 +397,49 @@ static const SoldierGun g_soldierGuns[] =
 	{ "kamakazi",     0, 0.000f, 1.00f, 1, 0.0f, 0.0f, nullptr,                     "combatidle" },
 };
 
+// Damage of one bullet against the player, by skill 1 / 2 / 3, and bullets per shot - taken from the original cz.so
+// (CTerrorist::ShootPistol/SMG/MP5/AssaultRifle/MachineGun/Shotgun/SniperRifle: FireBullets(..., iDamage)).
+// It goes through TraceAttack like the original (hit groups, armor), so no extra skill scale on top.
+struct SoldierOrigDmg
+{
+	const char *name;
+	int d1, d2, d3;
+	int pellets;
+};
+
+static const SoldierOrigDmg g_soldierOrigDmg[] =
+{
+	{ "pistol",        1,  2,  5, 1 }, // 15% of the shots are a burst of 3 bullets (see FireShot)
+	{ "smg",           1,  2,  4, 1 },
+	{ "mp5",           3,  6, 10, 1 },
+	{ "mp",            3,  6, 10, 1 }, // the same weapon as mp5 in our classnames
+	{ "assaultrifle",  5,  8, 12, 1 },
+	{ "machinegun",    8, 11, 15, 1 },
+	{ "shotgun",       3,  5, 10, 5 },
+	{ "sniperrifle",  18, 25, 45, 1 },
+	// grenader / law: their rifle part is not taken from the original (the original LAW fires rockets), assault rifle values
+	{ "grenader",      5,  8, 12, 1 },
+	{ "law",           5,  8, 12, 1 },
+};
+
+static const SoldierOrigDmg *Soldier_FindOrigDmg(const char *gunName)
+{
+	for (const SoldierOrigDmg &d : g_soldierOrigDmg)
+		if (!Q_strcmp(d.name, gunName))
+			return &d;
+	return nullptr;
+}
+
+static float Soldier_ShotDamage(const SoldierGun *g)
+{
+	const SoldierOrigDmg *d = Soldier_FindOrigDmg(g->name);
+	if (!d)
+		return g->dmg * Soldier_DmgScale();
+	int sk = (int)CVAR_GET_FLOAT("skill");
+	int v = (sk <= 1) ? d->d1 : (sk == 2 ? d->d2 : d->d3);
+	return v * cz_enemy_damage.value;
+}
+
 static const SoldierGun *Soldier_FindGun(const char *classname)
 {
 	const char *p = Q_strrchr(classname, '_');
@@ -414,7 +459,7 @@ static bool Soldier_IsHostile(entvars_t *pev)
 	return Q_strncmp(STRING(gpGlobals->mapname), "cz_train", 8) != 0; // the training is scripted: nobody shoots
 }
 
-static int g_czLaserBeam = 0, g_czLaserDot = 0;
+static int g_czLaserBeam = 0, g_czLaserGlow = 0;
 
 void CCZSoldier::FireShot(CBaseEntity *pl)
 {
@@ -439,34 +484,44 @@ void CCZSoldier::FireShot(CBaseEntity *pl)
 	}
 	Vector aim = (pl->pev->origin + pl->pev->view_ofs * 0.6f - src).Normalize();
 	const float spr = g->spread * (Q_strstr(STRING(pev->classname), "shotgun") ? 1.0f : cz_enemy_spread.value);
-	Vector dir = aim + gpGlobals->v_right * (RANDOM_FLOAT(-1, 1) * spr) + gpGlobals->v_up * (RANDOM_FLOAT(-1, 1) * spr);
-	dir = dir.Normalize();
-
-	TraceResult tr;
-	UTIL_TraceLine(src, src + dir * 4096.0f, dont_ignore_monsters, ENT(pev), &tr);
 
 	EMIT_SOUND_DYN(ENT(pev), CHAN_WEAPON, g->sound, 1.0f, ATTN_NORM, 0, 94 + RANDOM_LONG(0, 15));
 	pev->effects |= EF_MUZZLEFLASH;
 	m_flFlashOff = gpGlobals->time + 0.08f;
 
-	// tracer
-	MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, src);
-		WRITE_BYTE(TE_TRACER);
-		WRITE_COORD(src.x); WRITE_COORD(src.y); WRITE_COORD(src.z);
-		WRITE_COORD(tr.vecEndPos.x); WRITE_COORD(tr.vecEndPos.y); WRITE_COORD(tr.vecEndPos.z);
-	MESSAGE_END();
+	// bullets per shot like the original: shotgun 5 pellets, pistol a burst of 3 in 15% of the shots
+	const SoldierOrigDmg *od = Soldier_FindOrigDmg(g->name);
+	int bullets = od ? od->pellets : 1;
+	if (!Q_strcmp(g->name, "pistol") && RANDOM_LONG(0, 99) <= 14)
+		bullets = 3;
+	const float dmg = Soldier_ShotDamage(g);
 
-	CBaseEntity *hit = CBaseEntity::Instance(tr.pHit);
-	if (hit && hit->pev->takedamage != DAMAGE_NO)
+	ClearMultiDamage();
+	for (int b = 0; b < bullets; b++)
 	{
-		ClearMultiDamage();
-		hit->TraceAttack(pev, g->dmg * Soldier_DmgScale(), dir, &tr, DMG_BULLET | DMG_NEVERGIB);
-		ApplyMultiDamage(pev, pev);
+		Vector dir = aim + gpGlobals->v_right * (RANDOM_FLOAT(-1, 1) * spr) + gpGlobals->v_up * (RANDOM_FLOAT(-1, 1) * spr);
+		dir = dir.Normalize();
+
+		TraceResult tr;
+		UTIL_TraceLine(src, src + dir * 4096.0f, dont_ignore_monsters, ENT(pev), &tr);
+
+		// tracer (one per shot is enough)
+		if (b == 0)
+		{
+			MESSAGE_BEGIN(MSG_PAS, SVC_TEMPENTITY, src);
+				WRITE_BYTE(TE_TRACER);
+				WRITE_COORD(src.x); WRITE_COORD(src.y); WRITE_COORD(src.z);
+				WRITE_COORD(tr.vecEndPos.x); WRITE_COORD(tr.vecEndPos.y); WRITE_COORD(tr.vecEndPos.z);
+			MESSAGE_END();
+		}
+
+		CBaseEntity *hit = CBaseEntity::Instance(tr.pHit);
+		if (hit && hit->pev->takedamage != DAMAGE_NO)
+			hit->TraceAttack(pev, dmg, dir, &tr, DMG_BULLET | DMG_NEVERGIB);
+		else if (tr.flFraction < 1.0f)
+			UTIL_GunshotDecalTrace(&tr, DECAL_GUNSHOT1 + RANDOM_LONG(0, 4), false, pev);
 	}
-	else if (tr.flFraction < 1.0f)
-	{
-		UTIL_GunshotDecalTrace(&tr, DECAL_GUNSHOT1 + RANDOM_LONG(0, 4), false, pev);
-	}
+	ApplyMultiDamage(pev, pev);
 }
 
 void CCZSoldier::LaserOff()
@@ -475,6 +530,10 @@ void CCZSoldier::LaserOff()
 	if (b)
 		UTIL_Remove(b);
 	m_hLaser = nullptr;
+	CBaseEntity *gl = m_hLaserGlow;
+	if (gl)
+		UTIL_Remove(gl);
+	m_hLaserGlow = nullptr;
 }
 
 void CCZSoldier::CombatThink()
@@ -583,48 +642,38 @@ void CCZSoldier::CombatThink()
 		return;
 	}
 
-	// sniper laser sight: ONE beam that smoothly follows the player; red dot sits on the rifle
-	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam && g_czLaserDot)
+	// sniper laser sight like the original CTerrorist::SetupLaserGlow / LaserGlowOn:
+	// a beam (laserbeam.spr, width 3, red, brightness 64, shade-out) from attachment 2 of the sniper model
+	// to the player entity itself, and a red glow (flare3.spr, brightness 255) on the same attachment.
+	// Both ends follow the models on the client, so the beam stays on the player without lag.
+	if (Q_strstr(STRING(pev->classname), "sniperrifle") && g_czLaserBeam)
 	{
-		UTIL_MakeVectors(pev->angles);
-		Vector muzzle = pev->origin + Vector(0, 0, 46) + gpGlobals->v_forward * 10; // laser sits on the chest (height approximate, not measured)
 		CBeam *bm = (CBeam *)(CBaseEntity *)m_hLaser;
-		float dtL = gpGlobals->time - m_flLaserT;
-		m_flLaserT = gpGlobals->time;
 		if (!bm)
 		{
 			bm = CBeam::BeamCreate("sprites/laserbeam.spr", 3);
 			if (bm)
 			{
-				bm->PointsInit(muzzle, target);
+				bm->EntsInit(entindex(), pl->entindex());
+				bm->SetStartAttachment(2);
+				bm->SetFlags(BEAM_FSHADEOUT);
 				bm->SetColor(255, 0, 0);
-				bm->SetBrightness(150);
-				bm->pev->spawnflags |= 0; // life: removed when the sniper loses the player
+				bm->SetBrightness(64);
+				bm->pev->spawnflags |= SF_BEAM_TEMPORARY;
 				m_hLaser = bm;
-				m_vLaserAim = muzzle + gpGlobals->v_forward * 200;
 			}
-			dtL = 0.1f;
 		}
-		if (bm)
+		CSprite *gl = (CSprite *)(CBaseEntity *)m_hLaserGlow;
+		if (!gl && g_czLaserGlow)
 		{
-			if (dtL > 0.25f) dtL = 0.25f;
-			float k = dtL * 3.0f;
-			if (k > 1.0f) k = 1.0f;
-			m_vLaserAim = m_vLaserAim + (target - m_vLaserAim) * k;
-			TraceResult ltr;
-			UTIL_TraceLine(muzzle, muzzle + (m_vLaserAim - muzzle).Normalize() * 4096.0f, dont_ignore_monsters, ENT(pev), &ltr);
-			bm->SetStartPos(muzzle);
-			bm->SetEndPos(ltr.vecEndPos);
-			m_vLaserDot = ltr.vecEndPos + ltr.vecPlaneNormal * 2.0f; // dot sits where the sniper will shoot
+			gl = CSprite::SpriteCreate("sprites/flare3.spr", pev->origin, FALSE);
+			if (gl)
+			{
+				gl->SetTransparency(kRenderGlow, 255, 0, 0, 255, kRenderFxNoDissipation);
+				gl->SetAttachment(edict(), 2);
+				m_hLaserGlow = gl;
+			}
 		}
-		Vector dotPos = bm ? m_vLaserDot : muzzle;
-		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, dotPos);
-			WRITE_BYTE(TE_SPRITE);
-			WRITE_COORD(dotPos.x); WRITE_COORD(dotPos.y); WRITE_COORD(dotPos.z);
-			WRITE_SHORT(g_czLaserDot);
-			WRITE_BYTE(1);   // scale 0.1
-			WRITE_BYTE(200);
-		MESSAGE_END();
 	}
 
 	if (!m_bMoving)
@@ -699,7 +748,7 @@ void CCZSoldier::Precache()
 	if (Q_strstr(STRING(pev->classname), "sniperrifle"))
 	{
 		g_czLaserBeam = PRECACHE_MODEL("sprites/laserbeam.spr");
-		g_czLaserDot = PRECACHE_MODEL("sprites/laserdot.spr");
+		g_czLaserGlow = PRECACHE_MODEL("sprites/flare3.spr"); // the original SetupLaserGlow sprite
 	}
 	if (!FStringNull(pev->model) && Q_strstr(STRING(pev->model), "leet_lo"))
 		PRECACHE_MODEL((char *)STRING(pev->model));
