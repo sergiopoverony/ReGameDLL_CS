@@ -7670,6 +7670,10 @@ void EXT_FUNC CBasePlayer::__API_HOOK(UpdateClientData)()
 		MESSAGE_BEGIN(MSG_ONE, gmsgResetHUD, nullptr, pev);
 		MESSAGE_END();
 
+		// CZ:DS: wind / grass settings of the map
+		extern void Cz_SendEnvInfo(edict_t *pPlayer);
+		Cz_SendEnvInfo(edict());
+
 		if (!m_fGameHUDInitialized)
 		{
 			MESSAGE_BEGIN(MSG_ONE, gmsgInitHUD, nullptr, pev);

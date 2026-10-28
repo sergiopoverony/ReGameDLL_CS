@@ -456,8 +456,83 @@ void CWorld::Precache()
 		gDisplayTitle = FALSE;
 }
 
+// CZ:DS: wind and grass settings of the map, like the original CWorld (defaults from its constructor)
+struct CzWorldEnv
+{
+	char map[64];
+	float windMinX, windMaxX, windMinY, windMaxY, windTimeMin, windTimeMax;
+	char grassSprite[128];
+	float grassFadeDist, grassMinHeight, grassMaxHeight;
+	int grassDensity;
+};
+static CzWorldEnv g_czEnv;
+
+static void Cz_EnvCheckMap()
+{
+	if (!Q_strcmp(g_czEnv.map, STRING(gpGlobals->mapname)))
+		return;
+	Q_memset(&g_czEnv, 0, sizeof(g_czEnv));
+	Q_strncpy(g_czEnv.map, STRING(gpGlobals->mapname), sizeof(g_czEnv.map) - 1);
+	g_czEnv.windMinX = -80.0f;
+	g_czEnv.windMaxX = 80.0f;
+	g_czEnv.windMinY = -80.0f;
+	g_czEnv.windMaxY = 80.0f;
+	g_czEnv.windTimeMin = 15.0f;
+	g_czEnv.windTimeMax = 30.0f;
+	g_czEnv.grassFadeDist = 510.0f;
+	g_czEnv.grassMinHeight = 30.0f;
+	g_czEnv.grassMaxHeight = 38.0f;
+	g_czEnv.grassDensity = 70;
+}
+
+static bool Cz_EnvKeyValue(KeyValueData *pkvd)
+{
+	Cz_EnvCheckMap();
+	const char *k = pkvd->szKeyName;
+	float v = Q_atof(pkvd->szValue);
+	if (FStrEq(k, "minWindX")) g_czEnv.windMinX = v;
+	else if (FStrEq(k, "maxWindX")) g_czEnv.windMaxX = v;
+	else if (FStrEq(k, "minWindY")) g_czEnv.windMinY = v;
+	else if (FStrEq(k, "maxWindY")) g_czEnv.windMaxY = v;
+	else if (FStrEq(k, "minTime")) g_czEnv.windTimeMin = v;
+	else if (FStrEq(k, "maxTime")) g_czEnv.windTimeMax = v;
+	else if (FStrEq(k, "grassSprite")) Q_strncpy(g_czEnv.grassSprite, pkvd->szValue, sizeof(g_czEnv.grassSprite) - 1);
+	else if (FStrEq(k, "grassFadeDist")) g_czEnv.grassFadeDist = v;
+	else if (FStrEq(k, "grassMinHeight")) g_czEnv.grassMinHeight = v;
+	else if (FStrEq(k, "grassMaxHeight")) g_czEnv.grassMaxHeight = v;
+	else if (FStrEq(k, "grassDensity")) g_czEnv.grassDensity = Q_atoi(pkvd->szValue);
+	else
+		return false;
+	pkvd->fHandled = TRUE;
+	return true;
+}
+
+// sent with the first HUD update of the player (the original does it in SendInitClientMessages)
+void Cz_SendEnvInfo(edict_t *pPlayer)
+{
+	Cz_EnvCheckMap();
+	MESSAGE_BEGIN(MSG_ONE, gmsgWindInfo, nullptr, pPlayer);
+		WRITE_COORD(g_czEnv.windMinX);
+		WRITE_COORD(g_czEnv.windMaxX);
+		WRITE_COORD(g_czEnv.windMinY);
+		WRITE_COORD(g_czEnv.windMaxY);
+		WRITE_COORD(g_czEnv.windTimeMin);
+		WRITE_COORD(g_czEnv.windTimeMax);
+	MESSAGE_END();
+	MESSAGE_BEGIN(MSG_ONE, gmsgGrassInfo, nullptr, pPlayer);
+		WRITE_STRING(g_czEnv.grassSprite);
+		WRITE_COORD(g_czEnv.grassFadeDist);
+		WRITE_COORD(g_czEnv.grassMinHeight);
+		WRITE_COORD(g_czEnv.grassMaxHeight);
+		WRITE_LONG(g_czEnv.grassDensity);
+	MESSAGE_END();
+}
+
 void CWorld::KeyValue(KeyValueData *pkvd)
 {
+	if (Cz_EnvKeyValue(pkvd))
+		return;
+
 	if (FStrEq(pkvd->szKeyName, "skyname"))
 	{
 		CVAR_SET_STRING("sv_skyname", pkvd->szValue);

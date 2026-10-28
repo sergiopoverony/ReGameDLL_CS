@@ -83,6 +83,8 @@ int gmsgBrass = 0;
 int gmsgHudIcons = 0;
 int gmsgCzTool = 0;
 int gmsgCzFiber = 0;
+int gmsgWindInfo = 0;
+int gmsgGrassInfo = 0;
 int gmsgFog = 0;
 int gmsgShowTimer = 0;
 int gmsgAccount = 0;
@@ -229,6 +231,9 @@ void LinkUserMessages()
 	gmsgHudIcons      = REG_USER_MSG("HudIcons", 6);
 	gmsgCzTool        = REG_USER_MSG("CzTool", 3);
 	gmsgCzFiber       = REG_USER_MSG("CzFiber", 2);
+	// CZ:DS: wind / grass settings of the map (worldspawn keys), like the original CBasePlayer::SendWindInfo / SendGrassInfo
+	gmsgWindInfo      = REG_USER_MSG("WindInfo", -1);
+	gmsgGrassInfo     = REG_USER_MSG("GrassInfo", -1);
 	gmsgFog           = REG_USER_MSG("Fog", 7);
 	gmsgShowTimer     = REG_USER_MSG("ShowTimer", 0);
 	gmsgHudTextArgs   = REG_USER_MSG("HudTextArgs", -1);

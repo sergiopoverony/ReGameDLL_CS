@@ -292,6 +292,8 @@ extern int gmsgBotProgress;
 extern int gmsgBrass;
 extern int gmsgHudIcons;
 extern int gmsgCzTool;
+extern int gmsgWindInfo;
+extern int gmsgGrassInfo;
 extern int gmsgCzFiber;
 extern int gmsgFog;
 extern int gmsgShowTimer;
