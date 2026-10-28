@@ -397,7 +397,42 @@ void CCZTorchFx::FxThink()
 // ---------------------------------------------------------------------------
 // radio controlled bomb: planted in a marked zone with the left button, detonated with the next press
 // ---------------------------------------------------------------------------
-static EHANDLE g_hRcPlanted;
+// like the original CRadioControlledBomb::m_BombList[20]: several mines can be planted (one per zone)
+// and the detonator blows all of them at once (DetonateBombs)
+#define CZ_RC_MAX_BOMBS 20
+static EHANDLE g_hRcBombs[CZ_RC_MAX_BOMBS];
+// original CBomb: pev->dmg 100; CGrenade::Explode3 -> CBaseMonster::RadiusDamage, radius = dmg * 2.5
+static const float CZ_RC_DAMAGE = 100.0f;
+static const float CZ_RC_RADIUS = 250.0f;
+
+static int Cz_RcBombCount()
+{
+	int n = 0;
+	for (int i = 0; i < CZ_RC_MAX_BOMBS; i++)
+		if ((CBaseEntity *)g_hRcBombs[i])
+			n++;
+	return n;
+}
+
+// original AddToBombArray: the first free slot, nothing when all 20 are taken
+static bool Cz_RcAddBomb(CBaseEntity *b)
+{
+	for (int i = 0; i < CZ_RC_MAX_BOMBS; i++)
+	{
+		if (!(CBaseEntity *)g_hRcBombs[i])
+		{
+			g_hRcBombs[i] = b;
+			return true;
+		}
+	}
+	return false;
+}
+
+static void Cz_RcForgetBombs()
+{
+	for (int i = 0; i < CZ_RC_MAX_BOMBS; i++)
+		g_hRcBombs[i] = nullptr;
+}
 static void Cz_RcFinish(CBaseEntity *zone);
 static EHANDLE g_hRcZone; // the usetool zone where the plant was started
 static float g_flRcPlantTime = 0;
@@ -442,7 +477,7 @@ public:
 		p->iSlot = 4;
 		p->iPosition = 6;
 		p->iId = m_iId = WEAPON_C4;
-		p->iWeight = 5;
+		p->iWeight = 3; // original GetItemInfo: weight 3 (flags there 24; SELECTONEMPTY kept so the detonator stays selectable)
 		p->iFlags = ITEM_FLAG_SELECTONEMPTY;
 		return 1;
 	}
@@ -454,7 +489,7 @@ public:
 		return ok;
 	}
 	virtual int iItemSlot() { return 5; }
-	virtual float GetMaxSpeed() { return 250.0f; }
+	virtual float GetMaxSpeed() { return g_rcState == 1 ? 1.0f : 225.0f; } // original: 225, 1 while planting
 	virtual BOOL UseDecrement() { return FALSE; }
 	virtual void PrimaryAttack() {}
 	virtual void SecondaryAttack() {}
@@ -542,7 +577,11 @@ public:
 		g_rcStep2 = m_rcStep2;
 		g_rcPos = m_rcPos;
 		g_rcAng = m_rcAng;
-		g_hRcPlanted = m_hPlanted;
+		for (int i = 0; i < CZ_RC_MAX_BOMBS; i++)
+			g_hRcBombs[i] = m_hBombs[i];
+		// a save made before several mines existed: its single mine goes into the first slot
+		if (!Cz_RcBombCount() && (CBaseEntity *)m_hPlanted)
+			g_hRcBombs[0] = m_hPlanted;
 		g_flRcPlantTime = m_plantTime;
 		Q_strncpy(g_czLastMap, STRING(gpGlobals->mapname), sizeof(g_czLastMap) - 1);
 		g_czStatePending = true;
@@ -611,7 +650,9 @@ public:
 		m_rcStep2 = g_rcStep2;
 		m_rcPos = g_rcPos;
 		m_rcAng = g_rcAng;
-		m_hPlanted = g_hRcPlanted;
+		for (int i = 0; i < CZ_RC_MAX_BOMBS; i++)
+			m_hBombs[i] = g_hRcBombs[i];
+		m_hPlanted = nullptr;
 		m_plantTime = g_flRcPlantTime;
 	}
 
@@ -621,7 +662,8 @@ public:
 	int m_rcState = 0;
 	float m_rcDue = 0, m_rcStep2 = 0, m_plantTime = 0;
 	Vector m_rcPos, m_rcAng;
-	EHANDLE m_hPlanted;
+	EHANDLE m_hPlanted;                  // old saves (one mine)
+	EHANDLE m_hBombs[CZ_RC_MAX_BOMBS];
 	bool m_bLoaded = false;
 	float m_tResend = 0;
 };
@@ -637,6 +679,7 @@ TYPEDESCRIPTION CCZState::m_SaveData[] =
 	DEFINE_FIELD(CCZState, m_rcPos, FIELD_VECTOR),
 	DEFINE_FIELD(CCZState, m_rcAng, FIELD_VECTOR),
 	DEFINE_FIELD(CCZState, m_hPlanted, FIELD_EHANDLE),
+	DEFINE_ARRAY(CCZState, m_hBombs, FIELD_EHANDLE, CZ_RC_MAX_BOMBS),
 };
 IMPLEMENT_SAVERESTORE(CCZState, CBaseEntity)
 LINK_ENTITY_TO_CLASS(cz_state, CCZState, CCSCzState)
@@ -760,8 +803,9 @@ void CCZRcCtl::CtlThink()
 		CBaseEntity *zone = g_hRcZone;
 		if (zone && !Cz_Overlaps(zone, pl))
 		{
-			g_rcState = 0;
+			g_rcState = Cz_RcBombCount() > 0 ? 2 : 0;
 			g_hRcZone = nullptr;
+			pl->ResetMaxSpeed();
 			Cz_RcAnim(pl, 0);
 			ALERT(at_aiconsole, "rc bomb: plant cancelled, player left the zone\n");
 			return;
@@ -769,10 +813,13 @@ void CCZRcCtl::CtlThink()
 		// bomb appears 1.07 s after the press
 		if (now >= g_rcDue)
 		{
-			CBaseEntity *old = g_hRcPlanted;
-			if (old)
-				UTIL_Remove(old);
-			g_hRcPlanted = CBaseEntity::Create("cz_rc_planted", g_rcPos, g_rcAng, nullptr);
+			CBaseEntity *bomb = CBaseEntity::Create("cz_rc_planted", g_rcPos, g_rcAng, nullptr);
+			if (bomb && !Cz_RcAddBomb(bomb))
+			{
+				UTIL_Remove(bomb); // all 20 slots taken (original AddToBombArray refuses as well)
+				bomb = nullptr;
+			}
+			pl->ResetMaxSpeed();
 			g_flRcPlantTime = now;
 			if (g_rcCharges > 0)
 				g_rcCharges--;
@@ -783,7 +830,7 @@ void CCZRcCtl::CtlThink()
 			g_rcState = 2;
 			Cz_RcFinish(g_hRcZone);
 			Cz_SendTool();
-			ALERT(at_aiconsole, "rc bomb planted at %.0f %.0f %.0f (left %d)\n", g_rcPos.x, g_rcPos.y, g_rcPos.z, g_rcCharges);
+			ALERT(at_console, "rc bomb planted at %.0f %.0f %.0f (mines left %d, planted %d)\n", g_rcPos.x, g_rcPos.y, g_rcPos.z, g_rcCharges, Cz_RcBombCount());
 		}
 		return;
 	}
@@ -793,40 +840,54 @@ void CCZRcCtl::CtlThink()
 		if (now < g_rcDue)
 			return;
 
-		CBaseEntity *bomb = g_hRcPlanted;
-		Vector pos = bomb ? bomb->pev->origin : pl->pev->origin;
-		MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pos);
-			WRITE_BYTE(TE_EXPLOSION);
-			WRITE_COORD(pos.x);
-			WRITE_COORD(pos.y);
-			WRITE_COORD(pos.z);
-			WRITE_SHORT(g_sModelIndexFireball);
-			WRITE_BYTE(25);
-			WRITE_BYTE(15);
-			WRITE_BYTE(0);
-		MESSAGE_END();
-		UTIL_ScreenShake(pos, 8.0f, 40.0f, 2.0f, 700.0f);
-		g_rcUnstuck = now + 6.0f;
-		if (bomb)
-			EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
-		ALERT(at_aiconsole, "rc bomb detonated at %.0f %.0f %.0f\n", pos.x, pos.y, pos.z);
-
-		CBaseEntity *brk = nullptr;
-		while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
+		// like the original DetonateBombs: every planted mine goes off
+		int nBombs = Cz_RcBombCount();
+		ALERT(at_console, "rc bomb: detonating %d mine(s)\n", nBombs);
+		for (int i = 0; i < CZ_RC_MAX_BOMBS; i++)
 		{
-			bool byTarget = !FStringNull(brk->pev->target) && FStrEq(STRING(brk->pev->target), "bomb_target2");
-			ALERT(at_console, "rc bomb: breakable '%s' model=%s onlyby=%d takedamage=%d target=%s\n", STRING(brk->pev->targetname),
-				STRING(brk->pev->model), brk->pev->iuser4, (int)brk->pev->takedamage, STRING(brk->pev->target));
-			if ((brk->pev->iuser4 == 2 || byTarget) && brk->pev->takedamage != DAMAGE_NO)
-			{
-				ALERT(at_aiconsole, "rc bomb: breaking '%s'\n", STRING(brk->pev->targetname));
-				brk->Use(pl, pl, USE_TOGGLE, 0);
-			}
-		}
+			CBaseEntity *bomb = g_hRcBombs[i];
+			if (!bomb)
+				continue;
+			Vector pos = bomb->pev->origin;
+			MESSAGE_BEGIN(MSG_PVS, SVC_TEMPENTITY, pos);
+				WRITE_BYTE(TE_EXPLOSION);
+				WRITE_COORD(pos.x);
+				WRITE_COORD(pos.y);
+				WRITE_COORD(pos.z);
+				WRITE_SHORT(g_sModelIndexFireball);
+				WRITE_BYTE(25);
+				WRITE_BYTE(15);
+				WRITE_BYTE(0);
+			MESSAGE_END();
+			UTIL_ScreenShake(pos, 8.0f, 40.0f, 2.0f, 700.0f);
+			EMIT_SOUND(bomb->edict(), CHAN_WEAPON, "weapons/c4_explode1.wav", VOL_NORM, ATTN_NORM);
 
-		if (bomb)
+			// the objects only a mine can break: those inside the blast radius of this mine
+			// (the original does it through RadiusDamage; distance to the nearest point of the box - approximation)
+			CBaseEntity *brk = nullptr;
+			while ((brk = UTIL_FindEntityByClassname(brk, "func_breakable")))
+			{
+				if (brk->pev->takedamage == DAMAGE_NO)
+					continue;
+				bool byTarget = !FStringNull(brk->pev->target) && FStrEq(STRING(brk->pev->target), "bomb_target2");
+				if (brk->pev->iuser4 != 2 && !byTarget)
+					continue;
+				Vector nearest;
+				for (int k = 0; k < 3; k++)
+					nearest[k] = Q_max(brk->pev->absmin[k], Q_min(pos[k], brk->pev->absmax[k]));
+				float dist = (nearest - pos).Length();
+				ALERT(at_console, "rc bomb %d: breakable '%s' model=%s dist=%.0f%s\n", i, STRING(brk->pev->targetname),
+					STRING(brk->pev->model), dist, dist <= CZ_RC_RADIUS ? " -> break" : "");
+				if (dist <= CZ_RC_RADIUS)
+					brk->Use(pl, pl, USE_TOGGLE, 0);
+			}
+
+			// ordinary blast damage like the original grenade explosion (hurts whoever is too close)
+			::RadiusDamage(pos, bomb->pev, pl->pev, CZ_RC_DAMAGE, CZ_RC_RADIUS, CLASS_NONE, DMG_EXPLOSION); // original Detonate3 -> Explode3(tr, 0x1000000)
 			UTIL_Remove(bomb);
-		g_hRcPlanted = nullptr;
+		}
+		Cz_RcForgetBombs();
+		g_rcUnstuck = now + 6.0f;
 		g_rcState = 0;
 		// the next mine comes out (if any); the tool stays until the player leaves through the door
 		g_rcHold = (g_rcCharges > 0) ? 0 : 1;
@@ -864,7 +925,7 @@ void CCZRcCtl::CtlThink()
 				Cz_SendTool();
 			}
 		}
-		else if (edge && g_rcHold == 1 && g_rcState == 2 && g_hRcPlanted && now >= g_flRcPlantTime + 0.5f)
+		else if (edge && g_rcHold == 1 && g_rcState == 2 && Cz_RcBombCount() > 0 && now >= g_flRcPlantTime + 0.5f)
 		{
 			Cz_RcAnim(pl, 7);
 			g_rcDue = now + 1.63f;
@@ -943,7 +1004,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 	if (Cz_IsTraining())
 		pl->RemoveAllItems(FALSE);
 	g_czTools = CZ_ICON_RCBOMB;
-	g_hRcPlanted = nullptr;
+	Cz_RcForgetBombs();
 	g_rcState = 0;
 	g_rcCharges = 5;
 	g_rcHold = 0;
@@ -986,7 +1047,7 @@ void Cz_ServerActivate()
 	g_rcBusy = 0;
 	g_fiberOn = false;
 	g_czStatePending = false;
-	g_hRcPlanted = nullptr;
+	Cz_RcForgetBombs();
 	Q_memset(g_czZoneCnt, 0, sizeof(g_czZoneCnt));
 	Q_memset(g_tQ, 0, sizeof(g_tQ));
 	g_czLastA = g_czLastC = -1;
@@ -1650,7 +1711,7 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 			pos = guide->pev->origin;
 			ang = guide->pev->angles;
 		}
-		if (g_rcState == 0)
+		if (g_rcState == 0 || g_rcState == 2)
 		{
 			g_rcPos = pos;
 			g_rcAng = ang;
@@ -1658,6 +1719,9 @@ void CCZUseTool::Complete(CBasePlayer *pl)
 			g_rcState = 1;
 			g_hRcZone = this;
 			Cz_RcAnim(pl, 6);
+			// original GetMaxSpeed: 1 while the mine is being planted (state 6) - the player stands still
+			pl->pev->maxspeed = 1.0f;
+			pl->pev->velocity.x = pl->pev->velocity.y = 0;
 		}
 	}
 
@@ -1778,7 +1842,8 @@ void CCZUseTool::ToolThink()
 	if (m_rcMode)
 	{
 		// plant with the left button (one press), only with a mine in the hands, inside the marked zone
-		if (atkEdge && Cz_RcActive(pl) && g_rcHold == 0 && g_rcCharges > 0 && g_rcState == 0 && gpGlobals->time >= g_rcBusy)
+		// state 2 = other mines already planted: one more can go into this zone (like the original)
+		if (atkEdge && Cz_RcActive(pl) && g_rcHold == 0 && g_rcCharges > 0 && (g_rcState == 0 || g_rcState == 2) && gpGlobals->time >= g_rcBusy)
 		{
 			m_nextUse = gpGlobals->time + 1.0f;
 			Complete(pl);
