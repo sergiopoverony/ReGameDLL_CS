@@ -229,7 +229,7 @@ void LinkUserMessages()
 	gmsgBotProgress   = REG_USER_MSG("BotProgress", -1);
 	gmsgBrass         = REG_USER_MSG("Brass", -1);
 	gmsgHudIcons      = REG_USER_MSG("HudIcons", 6);
-	gmsgCzTool        = REG_USER_MSG("CzTool", 3);
+	gmsgCzTool        = REG_USER_MSG("CzTool", 4);
 	gmsgCzFiber       = REG_USER_MSG("CzFiber", 2);
 	// CZ:DS: wind / grass settings of the map (worldspawn keys), like the original CBasePlayer::SendWindInfo / SendGrassInfo
 	gmsgWindInfo      = REG_USER_MSG("WindInfo", -1);

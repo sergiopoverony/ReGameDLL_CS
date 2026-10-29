@@ -111,8 +111,9 @@ static void Cz_RunQueue(CBasePlayer *pl)
 	}
 }
 
-// "CzTool": BYTE current tool (0 none, 1 camera, 2 fiber, 3 torch, 4 mines), BYTE mines left, BYTE 1 = detonator in hands
-static void Cz_SendTool()
+// "CzTool": BYTE current tool (0 none, 1 camera, 2 fiber, 3 torch, 4 mines), BYTE mines left, BYTE 1 = detonator in hands,
+// BYTE 1 = the tool was just picked up / given (only then the client shows the "EQUIPMENT" plate)
+static void Cz_SendTool(bool announce = false)
 {
 	CBasePlayer *pl = Cz_Player();
 	if (!pl)
@@ -127,6 +128,7 @@ static void Cz_SendTool()
 		WRITE_BYTE(tool);
 		WRITE_BYTE(g_rcCharges);
 		WRITE_BYTE(g_rcHold);
+		WRITE_BYTE(announce ? 1 : 0);
 	MESSAGE_END();
 }
 
@@ -994,7 +996,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 		EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 		ALERT(at_aiconsole, "tool given: weapon_radio\n");
 		Cz_SendIcons(true);
-		Cz_SendTool();
+		Cz_SendTool(true);
 		return true;
 	}
 
@@ -1027,7 +1029,7 @@ bool Cz_GiveTool(CBasePlayer *pl, const char *name)
 	EMIT_SOUND(ENT(pl->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 	ALERT(at_aiconsole, "tool given: weapon_radiocontrolledbomb\n");
 	Cz_SendIcons(true);
-	Cz_SendTool();
+	Cz_SendTool(true);
 	return true;
 }
 
@@ -1278,7 +1280,7 @@ void CCZToolPickup::Pickup(CBaseEntity *pOther)
 	EMIT_SOUND(ENT(pOther->pev), CHAN_ITEM, "items/gunpickup2.wav", VOL_NORM, ATTN_NORM);
 	ALERT(at_aiconsole, "tool picked up: %s (mask %d)\n", STRING(pev->classname), g_czTools);
 	Cz_SendIcons(true);
-	Cz_SendTool();
+	Cz_SendTool(true);
 	// pickup / draw animations of the original: camera 2, torch 2, fiber optic camera 1
 	Cz_WeapAnim((CBasePlayer *)pOther, (m_bit == CZ_ICON_FIBER) ? 1 : 2);
 	Cz_QueueAnim(0, 0, 1.0f);

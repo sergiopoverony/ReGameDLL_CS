@@ -42,6 +42,7 @@ public:
 	float m_flMoveWaitFinished = 0;
 	int m_nRouteRefresh = 0; // route rebuilt after a block (up to 3 times)
 	int m_nBlockWaits = 0;
+	float m_flNavLogAt = 0; // rate limit of the "blocked" diagnostics
 	float m_flChaseSince = 0, m_flChaseBest = 0; // engine chase step fallback (cz_hlnav.cpp)   // waited for a moving blocker (door) (up to 12 x 0.5 s)
 	EHANDLE m_hMoveTargetEnt; // walking to this entity (leader / enemy): bumping into it is a valid move
 	void StartFollow(CBaseEntity *leader);

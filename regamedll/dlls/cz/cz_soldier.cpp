@@ -62,6 +62,7 @@ public:
 	float m_flNextShot = 0;
 	float m_flNextMelee = 0;
 	float m_flLastSeen = 0;
+	float m_flSeenSince = 0; // start of the current uninterrupted sight of the player (0 = not in sight)
 	float m_flNextChase = 0;
 	float m_flNextDoor = 0;
 	float m_flFlashOff = 0;
@@ -693,7 +694,13 @@ void CCZSoldier::CombatThink()
 	}
 
 	if (visible)
+	{
 		m_flLastSeen = gpGlobals->time;
+		if (m_flSeenSince == 0.0f)
+			m_flSeenSince = gpGlobals->time;
+	}
+	else
+		m_flSeenSince = 0.0f;
 
 	const SoldierGun *g = Soldier_FindGun(STRING(pev->classname));
 	bool melee = (g->dmg <= 0.0f);
@@ -803,7 +810,12 @@ void CCZSoldier::CombatThink()
 	float hold = melee ? 56.0f : 600.0f;
 	if (!m_cantMove)
 	{
-		bool want = melee ? (dist > 84.0f) : (!visible || dist > hold + 150.0f);
+		// sight hysteresis (test 31.10: the gunner on top of the stairs stood, twitched and shot - the player
+		// kept popping in and out of sight at the stair edge, every change flipped run / stop): go after the
+		// player only when he was out of sight for 1 s, stop only after 0.5 s of steady sight
+		bool lost = !visible && gpGlobals->time - m_flLastSeen > 1.0f;
+		bool steady = visible && m_flSeenSince > 0.0f && gpGlobals->time - m_flSeenSince > 0.5f;
+		bool want = melee ? (dist > 84.0f) : (lost || dist > hold + 150.0f);
 		if (want && !m_bMoving && gpGlobals->time >= m_flNextChase)
 		{
 			m_flNextChase = gpGlobals->time + (melee ? 0.5f : 0.8f);
@@ -811,7 +823,7 @@ void CCZSoldier::CombatThink()
 			m_hMoveTargetEnt = pl;
 			TrySetRunAnim();
 		}
-		else if (m_bMoving && visible && dist < hold)
+		else if (m_bMoving && dist < hold && (melee ? visible : steady))
 			StopMove();
 		else if (m_bMoving && gpGlobals->time >= m_flNextChase)
 		{

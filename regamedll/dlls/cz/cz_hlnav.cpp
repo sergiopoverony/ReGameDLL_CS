@@ -482,6 +482,15 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 			}
 		}
 
+		if (gpGlobals->time >= m_flNavLogAt)
+		{
+			// diagnostics for the next test (actors that do not go down stairs): where and why the look-ahead failed
+			m_flNavLogAt = gpGlobals->time + 2.0f;
+			ALERT(at_console, "hlnav: '%s' (%s) blocked at %.0f %.0f %.0f -> wp %d/%d %.0f %.0f %.0f after %.0f units, check %d\n",
+				STRING(pev->targetname), STRING(pev->classname), pev->origin.x, pev->origin.y, pev->origin.z, m_iPath, m_nPath,
+				wp.x, wp.y, wp.z, flDist, HlCheckLocalMove(pev->origin, pev->origin + dir * checkDist, target, nullptr));
+		}
+
 		Vector apex;
 		if (HlTriangulate(pev->origin, wp, flDist, target, &apex))
 		{
