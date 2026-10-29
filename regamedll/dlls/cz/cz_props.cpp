@@ -666,7 +666,7 @@ void CMonsterNPC::AnimThink()
 		}
 	}
 
-	if (m_bMoving)
+	if (m_bMoving && !(m_bFollow && !m_bScripted)) // a follower walks in FollowStep (stops 90 units from the leader)
 	{
 		MoveStep(0, false);
 

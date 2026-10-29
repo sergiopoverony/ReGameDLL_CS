@@ -447,8 +447,10 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 		return HLNAV_MOVE_WAIT;
 
 	Vector wp = m_path[m_iPath];
-	Vector dir(wp.x - pev->origin.x, wp.y - pev->origin.y, 0);
-	dir = dir.Normalize();
+	// 3D like the SDK: on stairs the look-ahead end point climbs with them. (A flat end point - my first
+	// version - made CheckLocalMove report "goal more than 64 units under/over the end" on every stair case:
+	// the actors stopped at the bottom of stairs, test 30.10.)
+	Vector dir = (wp - pev->origin).Normalize();
 	float wpDist = (wp - pev->origin).Length2D();
 
 	// MakeIdealYaw + ChangeYaw
@@ -460,6 +462,21 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 	CBaseEntity *target = (m_iPath == m_nPath - 1) ? pTarget : nullptr;
 	if (checkDist > 1.0f && HlCheckLocalMove(pev->origin, pev->origin + dir * checkDist, target, &flDist) != HLNAV_LOCALMOVE_VALID)
 	{
+		// SDK Move(): a moving blocker (a door that is still opening, a train), not the player: wait for it
+		{
+			TraceResult bt;
+			TRACE_MONSTER_HULL(ENT(pev), pev->origin, pev->origin + dir * (flDist + 16.0f), dont_ignore_monsters, ENT(pev), &bt);
+			CBaseEntity *blocker = CBaseEntity::Instance(bt.pHit);
+			if (blocker && blocker->edict() != INDEXENT(0) && !blocker->IsPlayer()
+				&& (blocker->pev->velocity.Length() > 0.1f || blocker->pev->avelocity.Length() > 0.1f)
+				&& m_nBlockWaits < 12)
+			{
+				m_nBlockWaits++;
+				m_flMoveWaitFinished = gpGlobals->time + 0.5f;
+				return HLNAV_MOVE_WAIT;
+			}
+		}
+
 		Vector apex;
 		if (HlTriangulate(pev->origin, wp, flDist, target, &apex))
 		{
@@ -468,19 +485,19 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 		}
 		else
 		{
-			// refresh the route once (FRefreshRoute), then give up (TaskFail)
-			if (!m_bRouteRefreshed)
+			// refresh the route (FRefreshRoute) a few times with a short wait, then give up (TaskFail)
+			if (m_nRouteRefresh < 3)
 			{
-				m_bRouteRefreshed = true;
+				m_nRouteRefresh++;
 				Vector goal = m_path[m_nPath - 1];
 				HlBuildRoute(goal, pTarget);
-				m_flMoveWaitFinished = gpGlobals->time + 0.1f;
+				m_flMoveWaitFinished = gpGlobals->time + 0.4f;
 				return HLNAV_MOVE_WAIT;
 			}
 			return HLNAV_MOVE_FAILED;
 		}
 		wp = m_path[m_iPath];
-		dir = Vector(wp.x - pev->origin.x, wp.y - pev->origin.y, 0).Normalize();
+		dir = (wp - pev->origin).Normalize();
 		wpDist = (wp - pev->origin).Length2D();
 		pev->ideal_yaw = UTIL_VecToYaw(Vector(wp.x - pev->origin.x, wp.y - pev->origin.y, 0));
 		checkDist = Q_min(wpDist, HLNAV_DIST_TO_CHECK);
@@ -491,7 +508,8 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 	{
 		HlOpenDoorOnLink(m_path[m_iPath], m_path[m_iPath + 1]);
 		m_iPath++;
-		m_bRouteRefreshed = false;
+		m_nRouteRefresh = 0;
+		m_nBlockWaits = 0;
 		if (m_flMoveWaitFinished > gpGlobals->time)
 			return HLNAV_MOVE_WAIT;
 		wp = m_path[m_iPath];
@@ -524,7 +542,8 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 
 void CMonsterNPC::BuildPath(const Vector &goal)
 {
-	m_bRouteRefreshed = false;
+	m_nRouteRefresh = 0;
+	m_nBlockWaits = 0;
 	if (!HlBuildRoute(goal, nullptr))
 		ALERT(at_aiconsole, "hlnav: '%s' no route to %.0f %.0f %.0f\n", STRING(pev->targetname), goal.x, goal.y, goal.z);
 }

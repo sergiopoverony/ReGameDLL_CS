@@ -40,7 +40,8 @@ public:
 	int HlMove(float flInterval, CBaseEntity *pTarget);
 	bool HlMoveStep(float stopDist);
 	float m_flMoveWaitFinished = 0;
-	bool m_bRouteRefreshed = false;
+	int m_nRouteRefresh = 0; // route rebuilt after a block (up to 3 times)
+	int m_nBlockWaits = 0;   // waited for a moving blocker (door) (up to 12 x 0.5 s)
 	EHANDLE m_hMoveTargetEnt; // walking to this entity (leader / enemy): bumping into it is a valid move
 	void StartFollow(CBaseEntity *leader);
 	void StopFollow();
