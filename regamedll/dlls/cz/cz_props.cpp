@@ -304,13 +304,16 @@ static std::vector<Vector> g_navNodes;
 static std::vector<std::vector<int> > g_navAdj;
 static std::string g_navMap;
 
-// one walking step like the engine does for monsters: step up (<= 18), move, step down (<= 18)
-static bool Nav_Step(const Vector &from, float x, float y, Vector &out)
+// one walking step like the engine does for monsters (SV_movestep): lifted by the step height (<= 18), move,
+// step down; when the lifted hull does not fit (door frame / arch lower than 90 above the floor), the same
+// move without the lift - like the engine retries a start-solid step lowered (30.10: before this the node graph
+// had no links through low doorways and the actors walked into the walls next to them)
+static bool Nav_StepAt(const Vector &from, float x, float y, float lift, Vector &out)
 {
 	const float STEP = 18.0f;
 	const float CENTER = 36.0f; // human hull center above the floor
 
-	Vector s = from + Vector(0, 0, STEP + CENTER);
+	Vector s = from + Vector(0, 0, lift + CENTER);
 	Vector e(x, y, s.z);
 
 	TraceResult tr;
@@ -318,13 +321,18 @@ static bool Nav_Step(const Vector &from, float x, float y, Vector &out)
 	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction < 1.0f)
 		return false;
 
-	Vector d = e - Vector(0, 0, STEP * 2);
+	Vector d = e - Vector(0, 0, lift + STEP);
 	UTIL_TraceHull(e, d, ignore_monsters, human_hull, nullptr, &tr);
 	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction >= 1.0f)
 		return false; // ledge or stuck
 
 	out = Vector(x, y, tr.vecEndPos.z - CENTER);
 	return true;
+}
+
+static bool Nav_Step(const Vector &from, float x, float y, Vector &out)
+{
+	return Nav_StepAt(from, x, y, 18.0f, out) || Nav_StepAt(from, x, y, 1.0f, out);
 }
 
 static bool Nav_Clear(const Vector &a, const Vector &b)
@@ -1357,12 +1365,16 @@ bool CMonsterNPC::MoveStepImpl(float stopDist, bool checkWalls)
 		{
 			float yaw = baseYaw + angles[i];
 
-			// look ahead ~56 units (anything solid, incl. props and other monsters) so we turn before touching it
+			// look ahead ~56 units (anything solid, incl. props and other monsters) so we turn before touching it.
+			// 30.10: this was TRACE_MONSTER_HULL from origin + 56 - the monster box (0..72) put on top of that spans
+			// 56..128 above the feet, so every door frame / arch lower than 128 "blocked" the way: the actors turned
+			// away from doorways, steered sideways and stuck in them. Now a human hull at standing height
+			// (center 40 above the feet = 4..76, small floor bumps / steps below 4 are left to WALK_MOVE)
 			float a2 = yaw * (M_PI / 180.0f);
-			Vector st = pev->origin + Vector(0, 0, 56.0f);
+			Vector st = pev->origin + Vector(0, 0, 40.0f);
 			Vector en = st + Vector(cos(a2), sin(a2), 0) * 56.0f;
 			TraceResult tr;
-			TRACE_MONSTER_HULL(ENT(pev), st, en, dont_ignore_monsters, ENT(pev), &tr);
+			UTIL_TraceHull(st, en, dont_ignore_monsters, human_hull, ENT(pev), &tr);
 			if (tr.flFraction < 1.0f && !tr.fStartSolid)
 			{
 				if (i == 0 && tr.pHit && m_flStuckSince != 0.0f)
