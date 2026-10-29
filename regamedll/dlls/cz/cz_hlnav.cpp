@@ -467,6 +467,30 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 	CBaseEntity *target = (m_iPath == m_nPath - 1) ? pTarget : nullptr;
 	if (checkDist > 1.0f && HlCheckLocalMove(pev->origin, pev->origin + dir * checkDist, target, &flDist) != HLNAV_LOCALMOVE_VALID)
 	{
+		// the player stands in the way (test 31.10, cz_recoil2 stairs at the evacuation point: the player stood on
+		// the stairs right below the hostage; log "deltaHostage blocked at 600 1110 128 ... after 80 units" three
+		// times = the hull hit the player at x ~680). The SDK does not wait for the player but has no last resort
+		// that walks elsewhere - ours (the engine chase step) walked the hostage back up the stairs. Stand and wait
+		// until the player steps aside; no detour, no route refresh, no chase step.
+		{
+			CBaseEntity *plr = UTIL_PlayerByIndex(1);
+			if (plr && plr->IsAlive())
+			{
+				Vector rel = plr->pev->origin - pev->origin;
+				Vector d2 = Vector(dir.x, dir.y, 0).Normalize();
+				float along = rel.x * d2.x + rel.y * d2.y;
+				Vector side = Vector(rel.x - d2.x * along, rel.y - d2.y * along, 0);
+				float dz = plr->pev->absmin.z - pev->origin.z;
+				if (along > 0.0f && along < flDist + 64.0f && side.Length() < 40.0f && fabs(dz) < 72.0f)
+				{
+					m_flChaseSince = 0.0f;
+					m_nRouteRefresh = 0;
+					m_flMoveWaitFinished = gpGlobals->time + 0.3f;
+					return HLNAV_MOVE_WAIT;
+				}
+			}
+		}
+
 		// SDK Move(): a moving blocker (a door that is still opening, a train), not the player: wait for it
 		{
 			TraceResult bt;
@@ -564,8 +588,16 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 	while (total > 0.001f)
 	{
 		float stepLen = Q_min(16.0f, total);
+		Vector stepFrom = pev->origin;
 		MOVE_TO_ORIGIN(ENT(pev), &wp.x, stepLen, MOVE_NORMAL);
 		total -= stepLen;
+		// SV_NewChaseDir (the engine picks another direction when the straight step fails) may step away from the
+		// waypoint - back up the stairs (test 31.10). A step that does not bring the actor closer is taken back.
+		if ((wp - pev->origin).Length2D() > (wp - stepFrom).Length2D() + 0.5f)
+		{
+			UTIL_SetOrigin(pev, stepFrom);
+			break;
+		}
 	}
 
 	if (m_iPath == m_nPath - 1 && (wp - pev->origin).Length2D() < 8.0f)
