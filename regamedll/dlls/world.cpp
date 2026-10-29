@@ -590,6 +590,10 @@ void Cz_ApplyWorldLight(CBaseEntity *pEntity)
 	pEntity->pev->renderfx = kRenderFxLightMultiplier;
 	// the user asked for half of the original boost (cz_recoil: 30 = x3 was too bright -> 15 = x1.5); never below 10 (= x1)
 	pEntity->pev->iuser4 = clamp(int(g_czEnv.lightMul * 0.5f), 10, 255);
+	// "nopvs" props (cz_recoil tower01 / reactor01, outside the world behind the sky): x1.0 - with the map
+	// multiplier the falling tower was too bright (user, test 30.10)
+	if (pEntity->pev->effects & EF_FORCEVISIBILITY)
+		pEntity->pev->iuser4 = 10;
 }
 
 // sent with the first HUD update of the player (the original does it in SendInitClientMessages)

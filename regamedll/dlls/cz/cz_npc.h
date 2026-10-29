@@ -60,6 +60,8 @@ public:
 	float m_flFaceUntil = 0, m_flBaseYaw = 0;
 	bool m_bBaseYawSet = false;
 	bool m_bReplanned = false;
+	float m_flStallSince = 0;  // no real step since (walk anim -> idle while blocked, no running on the spot)
+	bool m_bStallIdle = false;
 	bool m_bHoldEnd = false; // non-looping idle (crouch ...) stays on its last frame
 	bool m_bNoSit = false;   // soldiers never get the chair offset
 	// path_corner patrol (monster "target" -> path_corner chain)

@@ -180,7 +180,7 @@ void CFuncIllusionary::Spawn()
 	if (!Q_strncmp(STRING(gpGlobals->mapname), "cz_", 3) && pev->rendermode == kRenderTransTexture && pev->renderamt > 0 && pev->renderamt <= 40)
 	{
 		pev->rendermode = kRenderTransAdd;
-		pev->renderamt = Q_min(255.0f, pev->renderamt * 2.0f); // x6 was 3 times too bright (user, 28.10)
+		// the mapper's amount as is (x6 was 3 times too bright 28.10, x2 still too bright 30.10)
 		ALERT(at_console, "illusionary haze '%s': additive amt %.0f\n", STRING(pev->model), pev->renderamt);
 	}
 

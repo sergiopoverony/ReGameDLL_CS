@@ -826,7 +826,7 @@ void CCZSoldier::CombatThink()
 	}
 
 	// after a melee swing the butt animation stays on screen: restore the run cycle while chasing
-	if (m_bMoving && m_iMoveSeq >= 0 && pev->sequence != m_iMoveSeq && gpGlobals->time >= m_flNextMelee - 0.2f)
+	if (m_bMoving && !m_bStallIdle && m_iMoveSeq >= 0 && pev->sequence != m_iMoveSeq && gpGlobals->time >= m_flNextMelee - 0.2f)
 	{
 		pev->sequence = m_iMoveSeq;
 		pev->frame = 0;
@@ -1035,7 +1035,7 @@ void CCZSoldier::Spawn()
 	pev->deadflag = DEAD_NO;
 	m_bDead = false;
 	m_bNoSit = true;
-	m_bAllowGhost = true;
+	m_bAllowGhost = false; // 30.10: no collision-free walking any more (through walls, half inside walls, jumps)
 	m_bNoPatrol = (m_cantMove != 0) || (pev->spawnflags & 128);
 	m_bHoldEnd = true;
 	m_spawned = 1;

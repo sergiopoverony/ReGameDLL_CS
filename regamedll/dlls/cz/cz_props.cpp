@@ -980,6 +980,9 @@ void CMonsterNPC::BuildPath(const Vector &goal)
 
 void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 {
+	if (m_bDead)
+		return; // a corpse never walks
+
 	int oldSeq = pev->sequence;
 	float oldFrame = pev->frame;
 	m_vMoveTarget = target;
@@ -992,6 +995,8 @@ void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 	m_flStuckSince = 0.0f;
 	m_flProgTime = 0.0f;
 	m_bReplanned = false;
+	m_flStallSince = 0.0f;
+	m_bStallIdle = false;
 
 	{
 		int found = -1;
@@ -1112,7 +1117,42 @@ bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 	Vector before = pev->origin;
 	bool r = MoveStepImpl(stopDist, checkWalls);
 	Vector moved = pev->origin - before;
-	if (moved.Length() > 0.1f && moved.Length() < 64.0f && Npc_StepBlocked(edict(), before, pev->origin))
+
+	// blocked: do not run on the spot - stand (idle) until a real step is possible again, then run again
+	if (m_bMoving)
+	{
+		if (moved.Length() < 0.5f)
+		{
+			if (m_flStallSince == 0.0f)
+				m_flStallSince = gpGlobals->time;
+			else if (!m_bStallIdle && gpGlobals->time - m_flStallSince > 0.4f && m_iMoveSeq >= 0 && pev->sequence == m_iMoveSeq)
+			{
+				int idle = LookupSequence(FStringNull(m_idleAnim) ? "idle1" : STRING(m_idleAnim));
+				if (idle < 0)
+					idle = LookupSequence("idle1");
+				if (idle >= 0)
+				{
+					pev->sequence = idle;
+					pev->frame = 0;
+					ResetSequenceInfo();
+					m_bStallIdle = true;
+				}
+			}
+		}
+		else
+		{
+			m_flStallSince = 0.0f;
+			if (m_bStallIdle && m_iMoveSeq >= 0)
+			{
+				pev->sequence = m_iMoveSeq;
+				ResetSequenceInfo();
+				pev->framerate = 1.0f;
+			}
+			m_bStallIdle = false;
+		}
+	}
+
+	if (m_bGhost && moved.Length() > 0.1f && moved.Length() < 64.0f && Npc_StepBlocked(edict(), before, pev->origin))
 	{
 		// back to where we were, walk with the hull next time (WALK_MOVE steers around the wall)
 		UTIL_SetOrigin(pev, before);
@@ -1191,7 +1231,7 @@ bool CMonsterNPC::MoveStepImpl(float stopDist, bool checkWalls)
 		return true;
 	}
 
-	if (m_bGhost || gpGlobals->time < m_flGhostUntil)
+	if (m_bGhost) // only the red-shirt worker of cz_train01 (his manual route through props); walls are checked in MoveStep
 	{
 		// red-shirt worker: follows his path through props (no collision of his own), but stays solid for the player
 		float a = (UTIL_VecToYaw(flat) + m_flBiasCur) * (M_PI / 180.0f);
@@ -1281,23 +1321,19 @@ bool CMonsterNPC::MoveStepImpl(float stopDist, bool checkWalls)
 	{
 		m_flProgTime = gpGlobals->time;
 		m_flProgDist = d;
-		if (m_bAllowGhost && !m_bScripted)
+		// no jumps (user rule 30.10: every sudden move is a bug): replan once, skip a waypoint, and if the
+		// target itself can not be reached, the actor "arrives" where it stands (the script goes on)
+		if (!m_bReplanned)
 		{
-			// soldier stuck (door frame, prop): squeeze through without collision for a moment instead of replanning/teleporting
-			m_flGhostUntil = gpGlobals->time + 1.6f;
-			return false;
-		}
-		if (!finalLeg)
-			m_iPath++;               // give up this waypoint
-		else if (stopDist <= 0 && !m_bReplanned)
-		{
-			m_bReplanned = true; // replan once from here; next stall teleports
+			m_bReplanned = true;
 			BuildPath(m_vMoveTarget);
 		}
+		else if (!finalLeg)
+			m_iPath++;               // give up this waypoint
 		else if (stopDist <= 0)
 		{
-			UTIL_SetOrigin(pev, m_vMoveTarget);
-			DROP_TO_FLOOR(ENT(pev));
+			ALERT(at_console, "npc '%s': can't reach %.0f %.0f %.0f, stays at %.0f %.0f %.0f\n", STRING(pev->targetname),
+				m_vMoveTarget.x, m_vMoveTarget.y, m_vMoveTarget.z, pev->origin.x, pev->origin.y, pev->origin.z);
 			pev->angles.y = m_flMoveYaw;
 			m_bArrived = true;
 			StopMove();
@@ -1356,8 +1392,8 @@ bool CMonsterNPC::MoveStepImpl(float stopDist, bool checkWalls)
 				m_flStuckSince = gpGlobals->time;
 			else if (gpGlobals->time - m_flStuckSince > 2.5f && stopDist <= 0)
 			{
-				UTIL_SetOrigin(pev, m_vMoveTarget);
-				DROP_TO_FLOOR(ENT(pev));
+				// boxed in: stay here (no jump to the mark)
+				ALERT(at_console, "npc '%s': boxed in, stays at %.0f %.0f %.0f\n", STRING(pev->targetname), pev->origin.x, pev->origin.y, pev->origin.z);
 				pev->angles.y = m_flMoveYaw;
 				m_flStuckSince = 0;
 				m_bArrived = true;
@@ -1660,6 +1696,12 @@ void CCZScriptedSequence::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE
 	if (!npc)
 	{
 		ALERT(at_console, "scripted_sequence '%s': can't find monster_npc '%s'\n", STRING(pev->targetname), STRING(m_iszEntity));
+		return;
+	}
+	if (npc->m_bDead)
+	{
+		// test 30.10: a soldier killed before his script started stood on the stairs playing the run cycle
+		ALERT(at_console, "scripted_sequence '%s': '%s' is dead\n", STRING(pev->targetname), STRING(m_iszEntity));
 		return;
 	}
 
