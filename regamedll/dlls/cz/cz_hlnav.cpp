@@ -159,6 +159,9 @@ static void HlNav_Build()
 	}
 
 	REMOVE_ENTITY(hull);
+	for (int i = 0; i < count; i++)
+		if (g_hlNodes[i].links.empty())
+			ALERT(at_console, "hlnav: node %d at %.0f %.0f %.0f has no walkable link\n", i, g_hlNodes[i].origin.x, g_hlNodes[i].origin.y, g_hlNodes[i].origin.z);
 	ALERT(at_console, "hlnav: %s: %d nodes, %d walkable links\n", map, count, links);
 }
 
@@ -371,7 +374,9 @@ bool CMonsterNPC::HlBuildRoute(const Vector &vecGoal, CBaseEntity *pTarget)
 			HlRouteSimplify(pTarget);
 			return true;
 		}
-		ALERT(at_aiconsole, "hlnav: no path from node %d to %d\n", src, dst);
+		ALERT(at_aiconsole, "hlnav: no path from node %d (%.0f %.0f %.0f, %d links) to %d (%.0f %.0f %.0f, %d links)\n", src,
+			g_hlNodes[src].origin.x, g_hlNodes[src].origin.y, g_hlNodes[src].origin.z, (int)g_hlNodes[src].links.size(), dst,
+			g_hlNodes[dst].origin.x, g_hlNodes[dst].origin.y, g_hlNodes[dst].origin.z, (int)g_hlNodes[dst].links.size());
 	}
 
 	return false; // m_path keeps the goal: Move() finds out what is in the way
@@ -494,7 +499,24 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 				m_flMoveWaitFinished = gpGlobals->time + 0.4f;
 				return HLNAV_MOVE_WAIT;
 			}
-			return HLNAV_MOVE_FAILED;
+			// last resort before TaskFail: the engine monster step itself (UTIL_MoveToOrigin -> SV_NewChaseDir tries
+			// other directions around the obstacle) as long as it brings the actor closer; no progress for
+			// 1.5 s = failed. (Covers places the node graph has no link for - test 30.10: stairs going down.)
+			if (m_flChaseSince == 0.0f)
+			{
+				m_flChaseSince = gpGlobals->time;
+				m_flChaseBest = wpDist;
+			}
+			else if (wpDist < m_flChaseBest - 8.0f)
+			{
+				m_flChaseBest = wpDist;
+				m_flChaseSince = gpGlobals->time;
+			}
+			else if (gpGlobals->time - m_flChaseSince > 1.5f)
+			{
+				m_flChaseSince = 0.0f;
+				return HLNAV_MOVE_FAILED;
+			}
 		}
 		wp = m_path[m_iPath];
 		dir = (wp - pev->origin).Normalize();
@@ -502,6 +524,8 @@ int CMonsterNPC::HlMove(float flInterval, CBaseEntity *pTarget)
 		pev->ideal_yaw = UTIL_VecToYaw(Vector(wp.x - pev->origin.x, wp.y - pev->origin.y, 0));
 		checkDist = Q_min(wpDist, HLNAV_DIST_TO_CHECK);
 	}
+	else
+		m_flChaseSince = 0.0f;
 
 	// ShouldAdvanceRoute / AdvanceRoute: switch to the next waypoint a bit before reaching this one
 	if (wpDist <= HLNAV_CUT_CORNER && m_iPath < m_nPath - 1)
