@@ -1,5 +1,9 @@
 #pragma once
 
+// Half-Life SDK monster navigation (cz_hlnav.cpp)
+enum { HLNAV_LOCALMOVE_INVALID = 0, HLNAV_LOCALMOVE_INVALID_DONT_TRIANGULATE = 1, HLNAV_LOCALMOVE_VALID = 2 };
+enum { HLNAV_MOVE_OK = 0, HLNAV_MOVE_WAIT, HLNAV_MOVE_DONE, HLNAV_MOVE_FAILED };
+
 // shared declaration of the CZ:DS actor base (monster_npc, hostages, soldiers)
 
 class CMonsterNPC: public CBaseAnimating
@@ -26,6 +30,18 @@ public:
 	bool MoveStepImpl(float stopDist, bool checkWalls);
 	void TouchTriggers();
 	void BuildPath(const Vector &goal);
+	// Half-Life SDK movement (CBaseMonster::CheckLocalMove / FTriangulate / BuildRoute / Move), cz_hlnav.cpp
+	int HlCheckLocalMove(const Vector &vecStart, const Vector &vecEnd, CBaseEntity *pTarget, float *pflDist);
+	bool HlTriangulate(const Vector &vecStart, const Vector &vecEnd, float flDist, CBaseEntity *pTarget, Vector *pApex);
+	bool HlBuildRoute(const Vector &vecGoal, CBaseEntity *pTarget);
+	void HlRouteSimplify(CBaseEntity *pTarget);
+	void HlInsertWaypoint(const Vector &where);
+	void HlOpenDoorOnLink(const Vector &from, const Vector &to);
+	int HlMove(float flInterval, CBaseEntity *pTarget);
+	bool HlMoveStep(float stopDist);
+	float m_flMoveWaitFinished = 0;
+	bool m_bRouteRefreshed = false;
+	EHANDLE m_hMoveTargetEnt; // walking to this entity (leader / enemy): bumping into it is a valid move
 	void StartFollow(CBaseEntity *leader);
 	void StopFollow();
 	void FollowStep();

@@ -808,6 +808,7 @@ void CCZSoldier::CombatThink()
 		{
 			m_flNextChase = gpGlobals->time + (melee ? 0.5f : 0.8f);
 			StartMove(pl->pev->origin, UTIL_VecToYaw(Vector(to.x, to.y, 0)), true);
+			m_hMoveTargetEnt = pl;
 			TrySetRunAnim();
 		}
 		else if (m_bMoving && visible && dist < hold)
@@ -818,10 +819,15 @@ void CCZSoldier::CombatThink()
 			m_flNextChase = gpGlobals->time + (melee ? 0.5f : 0.8f);
 			m_vMoveTarget = pl->pev->origin;
 			m_flMoveYaw = UTIL_VecToYaw(Vector(to.x, to.y, 0));
-			if (m_iPath >= m_nPath || visible == false || (pl->pev->origin - pev->origin).Length() > 300.0f)
+			if (m_iPath >= m_nPath - 1 || visible == false || (pl->pev->origin - pev->origin).Length() > 300.0f)
 				BuildPath(pl->pev->origin);
 			else
-				m_nPath = m_iPath; // close and visible: walk straight at the player
+			{
+				// close and visible: walk straight at the player
+				m_path[0] = pl->pev->origin;
+				m_iPath = 0;
+				m_nPath = 1;
+			}
 		}
 	}
 

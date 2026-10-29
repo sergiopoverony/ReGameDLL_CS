@@ -297,188 +297,6 @@ void CItemGeneric::Use(CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE u
 
 
 // ---------------------------------------------------------------------------
-// Navigation: the maps carry info_node entities (the original NPCs path-find over them).
-// Nodes are connected when a human hull can walk between them in a straight line.
-// ---------------------------------------------------------------------------
-static std::vector<Vector> g_navNodes;
-static std::vector<std::vector<int> > g_navAdj;
-static std::string g_navMap;
-
-// one walking step like the engine does for monsters (SV_movestep): lifted by the step height (<= 18), move,
-// step down; when the lifted hull does not fit (door frame / arch lower than 90 above the floor), the same
-// move without the lift - like the engine retries a start-solid step lowered (30.10: before this the node graph
-// had no links through low doorways and the actors walked into the walls next to them)
-static bool Nav_StepAt(const Vector &from, float x, float y, float lift, Vector &out)
-{
-	const float STEP = 18.0f;
-	const float CENTER = 36.0f; // human hull center above the floor
-
-	Vector s = from + Vector(0, 0, lift + CENTER);
-	Vector e(x, y, s.z);
-
-	TraceResult tr;
-	UTIL_TraceHull(s, e, ignore_monsters, human_hull, nullptr, &tr);
-	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction < 1.0f)
-		return false;
-
-	Vector d = e - Vector(0, 0, lift + STEP);
-	UTIL_TraceHull(e, d, ignore_monsters, human_hull, nullptr, &tr);
-	if (tr.fStartSolid || tr.fAllSolid || tr.flFraction >= 1.0f)
-		return false; // ledge or stuck
-
-	out = Vector(x, y, tr.vecEndPos.z - CENTER);
-	return true;
-}
-
-static bool Nav_Step(const Vector &from, float x, float y, Vector &out)
-{
-	return Nav_StepAt(from, x, y, 18.0f, out) || Nav_StepAt(from, x, y, 1.0f, out);
-}
-
-static bool Nav_Clear(const Vector &a, const Vector &b)
-{
-	Vector cur = a;
-	Vector flat(b.x - a.x, b.y - a.y, 0);
-	float len = flat.Length();
-	if (len < 1.0f)
-		return true;
-
-	Vector dir = flat * (1.0f / len);
-	for (float t = 12.0f; ; t += 12.0f)
-	{
-		bool last = (t >= len);
-		float tt = last ? len : t;
-		Vector nxt;
-		if (!Nav_Step(cur, a.x + dir.x * tt, a.y + dir.y * tt, nxt))
-			return false;
-
-		cur = nxt;
-		if (last)
-			break;
-	}
-
-	return fabsf(cur.z - b.z) < 40.0f;
-}
-
-static void Nav_Load()
-{
-	const char *map = STRING(gpGlobals->mapname);
-	if (g_navMap == map)
-		return;
-
-	g_navMap = map;
-	g_navNodes.clear();
-	g_navAdj.clear();
-
-	CBaseEntity *pNode = nullptr;
-	while ((pNode = UTIL_FindEntityByClassname(pNode, "info_node")) != nullptr)
-	{
-		// put the node on the floor
-		Vector p = pNode->pev->origin;
-		TraceResult tr;
-		UTIL_TraceLine(p + Vector(0, 0, 16), p + Vector(0, 0, -200), ignore_monsters, nullptr, &tr);
-		if (tr.flFraction < 1.0f && !tr.fStartSolid)
-			p.z = tr.vecEndPos.z;
-		g_navNodes.push_back(p);
-	}
-
-	int n = (int)g_navNodes.size();
-	g_navAdj.resize(n);
-
-	for (int i = 0; i < n && n <= 600; i++)
-	{
-		for (int j = i + 1; j < n; j++)
-		{
-			if ((g_navNodes[i] - g_navNodes[j]).Length() > 700.0f)
-				continue;
-
-			if (Nav_Clear(g_navNodes[i], g_navNodes[j]))
-			{
-				g_navAdj[i].push_back(j);
-				g_navAdj[j].push_back(i);
-			}
-		}
-	}
-
-	ALERT(at_aiconsole, "nav: %d info_node loaded\n", n);
-}
-
-// returns the number of waypoints written to out (not including 'from'; the last one is 'to'), 0 = go straight
-static int Nav_FindPath(const Vector &from, const Vector &to, Vector *out, int maxOut)
-{
-	if (Nav_Clear(from, to))
-		return 0;
-
-	Nav_Load();
-	int n = (int)g_navNodes.size();
-	if (n == 0)
-		return 0;
-
-	// Dijkstra over nodes; start/end are connected to every visible node
-	std::vector<float> dist(n, 1e9f);
-	std::vector<int> prev(n, -1);
-	std::vector<char> done(n, 0);
-
-	for (int i = 0; i < n; i++)
-	{
-		float d = (g_navNodes[i] - from).Length();
-		if (d < 900.0f && Nav_Clear(from, g_navNodes[i]))
-			dist[i] = d;
-	}
-
-	int best = -1;
-	float bestCost = 1e9f;
-
-	for (;;)
-	{
-		int u = -1;
-		for (int i = 0; i < n; i++)
-			if (!done[i] && dist[i] < 1e8f && (u < 0 || dist[i] < dist[u]))
-				u = i;
-
-		if (u < 0)
-			break;
-
-		done[u] = 1;
-
-		// can the target be reached from this node?
-		float toEnd = (g_navNodes[u] - to).Length();
-		if (dist[u] + toEnd < bestCost && Nav_Clear(g_navNodes[u], to))
-		{
-			bestCost = dist[u] + toEnd;
-			best = u;
-		}
-
-		for (size_t k = 0; k < g_navAdj[u].size(); k++)
-		{
-			int v = g_navAdj[u][k];
-			float nd = dist[u] + (g_navNodes[u] - g_navNodes[v]).Length();
-			if (nd < dist[v])
-			{
-				dist[v] = nd;
-				prev[v] = u;
-			}
-		}
-	}
-
-	if (best < 0)
-		return 0;
-
-	// rebuild: to <- best <- prev ...
-	int chain[64];
-	int len = 0;
-	for (int c = best; c >= 0 && len < 64; c = prev[c])
-		chain[len++] = c;
-
-	int count = 0;
-	for (int i = len - 1; i >= 0 && count < maxOut - 1; i--)
-		out[count++] = g_navNodes[chain[i]];
-
-	out[count++] = to;
-	return count;
-}
-
-// ---------------------------------------------------------------------------
 // (class CMonsterNPC lives in cz_npc.h)
 
 static cvar_t cz_npc_sit_offset = { "cz_npc_sit_offset", "3", 0, 3.0f, nullptr };
@@ -796,9 +614,12 @@ void CMonsterNPC::Spawn()
 	pev->nextthink = gpGlobals->time + 0.1f;
 }
 
+void HlNav_EnsureBuilt();
+
 void CMonsterNPC::AnimThink()
 {
 	StudioFrameAdvance();
+	HlNav_EnsureBuilt(); // once per map (Half-Life node graph, cz_hlnav.cpp)
 
 	if (m_flNpcDropAt > 0 && gpGlobals->time >= m_flNpcDropAt)
 	{
@@ -980,14 +801,11 @@ void CMonsterNPC::PatrolStep()
 	m_bPatrolHeading = true;
 }
 
-void CMonsterNPC::BuildPath(const Vector &goal)
-{
-	m_iPath = 0;
-	m_nPath = Nav_FindPath(pev->origin, goal, m_path, 16);
-}
+// BuildPath: cz_hlnav.cpp (Half-Life SDK BuildRoute)
 
 void CMonsterNPC::StartMove(const Vector &target, float yaw, bool run)
 {
+	m_hMoveTargetEnt = nullptr; // a plain move to a spot (the chase sets the enemy after this)
 	if (m_bDead)
 		return; // a corpse never walks
 
@@ -1123,7 +941,9 @@ static bool Npc_StepBlocked(edict_t *self, const Vector &from, const Vector &to)
 bool CMonsterNPC::MoveStep(float stopDist, bool checkWalls)
 {
 	Vector before = pev->origin;
-	bool r = MoveStepImpl(stopDist, checkWalls);
+	// Half-Life SDK movement for everybody; the old step code stays only for the red-shirt worker of
+	// cz_train01 (his route was measured from the original demo)
+	bool r = m_bGhost ? MoveStepImpl(stopDist, checkWalls) : HlMoveStep(stopDist);
 	Vector moved = pev->origin - before;
 
 	// blocked: do not run on the spot - stand (idle) until a real step is possible again, then run again
